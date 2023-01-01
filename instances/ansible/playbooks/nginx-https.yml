@@ -128,8 +128,6 @@
         executable: /bin/bash
       register: update_nginx_config
       shell: |
-        NGINX_DIRECTORY="/etc/nginx/sites-available"
-
         cat <<EOF | sudo tee /etc/nginx/sites-available/{{ DOMAIN }} > /dev/null
         include /etc/nginx/common/market_data_notification_upstream.conf;
 
@@ -157,8 +155,8 @@
           server_tokens off;
           client_max_body_size 1m;
           
-          access_log $NGINX_DIRECTORY/{{ DOMAIN }}/access.log json_combined;
-          error_log $NGINX_DIRECTORY/{{ DOMAIN }}/error.log;
+          access_log /var/log/nginx/access.log json_combined;
+          error_log /var/log/nginx/error.log;
 
           include /etc/nginx/common/favicon_location.conf;
 
