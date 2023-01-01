@@ -31,12 +31,18 @@ resource "aws_vpc" "vpc" {
 
 resource "aws_internet_gateway" "igw" {
   vpc_id = aws_vpc.vpc.id
+  tags = {
+    Name = "market_data_notification"
+  }
 }
 
 resource "aws_subnet" "subnet_public" {
   vpc_id     = aws_vpc.vpc.id
   cidr_block = var.cidr_subnet
   availability_zone = var.ec2_az
+  tags = {
+    Name = "market_data_notification"
+  }
 }
 
 resource "aws_route_table" "rtb_public" {
@@ -83,6 +89,10 @@ resource "aws_security_group" "sg_22_80_443" {
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "market_data_notification"
   }
 }
 
