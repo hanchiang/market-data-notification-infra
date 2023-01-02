@@ -1,0 +1,181 @@
+name: Start Market data notification
+on:
+  schedule:
+    - cron: '50 12 * * 1-5' # weekdays
+  workflow_dispatch:
+    inputs:
+      logLevel:
+        description: 'Log level'     
+        required: false
+        default: 'info' 
+        type: choice
+        options:
+        - info
+        - warning
+        - debug
+jobs:
+  health_check:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    outputs:
+      health_check_outcome: ${{ steps.health_check.outputs.outcome }}
+    env:
+      HOST_NAME: ${{ secrets.HOST_NAME }}
+    steps:
+      - name: Check if Market data notification is already running
+        id: health_check
+        run: |
+          health_check=$(curl $HOST_NAME/healthz || true)
+          if [ -n "$health_check" ]
+          then
+            echo "::set-output name=outcome::success"
+          else
+            echo "::set-output name=outcome::failure"
+          fi
+  notify_already_running:
+    runs-on: ubuntu-latest
+    needs: [health_check]
+    if: ${{ needs.health_check.outputs.health_check_outcome == 'success' }}
+    steps:
+      - name: Send telegram notification Market data notification is already running
+        env:
+          TELEGRAM_DEV_BOT_TOKEN: ${{ secrets.TELEGRAM_DEV_BOT_TOKEN }}
+          TELEGRAM_DEV_ID: ${{ secrets.TELEGRAM_DEV_ID }}
+        run: |
+          now=$(date +%Y-%m-%dT%H:%M:%S)
+          text=$(echo "\[Github action\] Market data notification infra: Market data notification is already running at $now. Workflow: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" | sed 's~[[:blank:]]~%20~g')
+          curl "https://api.telegram.org/bot${TELEGRAM_DEV_BOT_TOKEN}/sendMessage?chat_id=${TELEGRAM_DEV_ID}&text=$text"
+          exit 0
+  start_ec2_and_deploy:
+    runs-on: ubuntu-latest
+    needs: [health_check]
+    if: ${{ needs.health_check.outputs.health_check_outcome == 'failure' }}
+    env:
+      DOMAIN: ${{ secrets.DOMAIN }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+      ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up ansible
+        env:
+          AWS_ACCESS_KEY: ${{ secrets.AWS_ACCESS_KEY }}
+          AWS_SECRET_KEY: ${{ secrets.AWS_SECRET_KEY }}
+        run: |
+          pwd
+          ls -la
+
+          # Install ansible and required dependencie          
+          python3 -m pip install ansible boto3
+          
+          python3 --version
+          python3 -m pip -V
+          ansible --version
+
+          # Ansible config
+          sudo mkdir -p /etc/ansible
+          cat << EOF | sudo tee /etc/ansible/ansible.cfg > /dev/null
+          # Since Ansible 2.12 (core):
+          # To generate an example config file (a "disabled" one with all default settings, commented out):
+          #               $ ansible-config init --disabled > ansible.cfg
+          #
+          # Also you can now have a more complete file by including existing plugins:
+          # ansible-config init --disabled -t all > ansible.cfg
+
+          # For previous versions of Ansible you can check for examples in the 'stable' branches of each version
+          # Note that this file was always incomplete  and lagging changes to configuration settings
+
+          # for example, for 2.9: https://github.com/ansible/ansible/blob/stable-2.9/examples/ansible.cfg
+          [inventory]
+          enable_plugins = aws_ec2
+
+          [defaults]
+          host_key_checking = False
+          EOF
+
+          # create aws-ec2.yml inventory
+          cat << EOF > ./instances/ansible/aws_ec2.yml
+          plugin: aws_ec2
+          regions: us-east-1
+          aws_access_key: $AWS_ACCESS_KEY
+          aws_secret_key: $AWS_SECRET_KEY
+          keyed_groups:
+            - key: tags
+              prefix: tag
+            - key: tags.Name
+              separator: ''
+          include_filters:
+          - tag:Name:
+            - 'market_data_notification'
+          EOF
+
+          # Create variables
+          cat << EOF > ./instances/ansible/vars.yml
+          USER: $SSH_USER
+          DOMAIN: $DOMAIN
+          DOMAINS:
+            - $DOMAIN
+          ADMIN_EMAIL: $ADMIN_EMAIL
+          EOF
+      - name: Create AWS config and credentials
+        env:
+          AWS_ACCESS_KEY: ${{ secrets.AWS_ACCESS_KEY }}
+          AWS_SECRET_KEY: ${{ secrets.AWS_SECRET_KEY }}
+        run: |
+          mkdir ~/.aws/
+          cat << EOF > ~/.aws/config
+          [default]
+          region = $AWS_REGION
+          output = json
+          EOF
+          chmod 600 ~/.aws/config
+
+          cat << EOF > ~/.aws/credentials
+          [default]
+          aws_access_key_id = $AWS_ACCESS_KEY
+          aws_secret_access_key = $AWS_SECRET_KEY
+          EOF
+          chmod 600 ~/.aws/credentials
+      - name: Create SSH private key
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.ssh/
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/market_data_notification_rsa
+          chmod 600 ~/.ssh/market_data_notification_rsa
+      - name: Run start script
+        id: start_script
+        env:
+          SSH_USER: ${{ secrets.SSH_USER }}
+          GITHUB_DEPLOY_TOKEN: ${{ secrets.GITHUB_DEPLOY_TOKEN }}
+        run: | 
+          cd instances
+          ./scripts/start.sh $GITHUB_DEPLOY_TOKEN $SSH_USER ~/.ssh/market_data_notification_rsa
+
+          sudo rm -rf ./instances/ansible/vars.yml ./instances/ansible/aws_ec2.yml ~/.ssh ~/.aws
+  notify_unsuccessful:
+    runs-on: ubuntu-latest
+    needs: [start_ec2_and_deploy]
+    if: ${{ needs.start_ec2_and_deploy.result == 'failure' }}
+    steps:
+      - name: Send telegram notification unsuccessful run
+        env:
+          TELEGRAM_DEV_BOT_TOKEN: ${{ secrets.TELEGRAM_DEV_BOT_TOKEN }}
+          TELEGRAM_DEV_ID: ${{ secrets.TELEGRAM_DEV_ID }}
+        run: |
+          now=$(date +%Y-%m-%dT%H:%M:%S)
+          text=$(echo "\[Github action\] Market data notification infra: Failed to start EC2 and deploy Market data notification at $now. Workflow: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" | sed 's~[[:blank:]]~%20~g')
+          curl "https://api.telegram.org/bot${TELEGRAM_DEV_BOT_TOKEN}/sendMessage?chat_id=${TELEGRAM_DEV_ID}&text=$text"
+  notify_successful:
+    runs-on: ubuntu-latest
+    needs: [start_ec2_and_deploy]
+    if: ${{ always() && needs.start_ec2_and_deploy.result == 'success' }}
+    steps:
+      - name: Send telegram notification successful run
+        env:
+          TELEGRAM_DEV_BOT_TOKEN: ${{ secrets.TELEGRAM_DEV_BOT_TOKEN }}
+          TELEGRAM_DEV_ID: ${{ secrets.TELEGRAM_DEV_ID }}
+        run: |
+          now=$(date +%Y-%m-%dT%H:%M:%S)
+          text=$(echo "\[Github action\] Market data notification infra: Successfully started EC2 and deployed Market data notification at $now. Workflow: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" | sed 's~[[:blank:]]~%20~g')
+          curl "https://api.telegram.org/bot${TELEGRAM_DEV_BOT_TOKEN}/sendMessage?chat_id=${TELEGRAM_DEV_ID}&text=$text"

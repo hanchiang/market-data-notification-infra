@@ -31,3 +31,7 @@ Run post-provisioning configurations such as nginx SSL
 
 ## 4. Deploy application
 Rerun the latest deploy job in github action
+
+# Operational hours
+Market data notification will run from:
+* 1pm UTC - 9pm UTC on weekdays
