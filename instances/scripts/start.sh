@@ -165,12 +165,12 @@ done
 ../ansible/start.sh $SSH_USER $SSH_PRIVATE_KEY_PATH 
 
 # Re-run deploy workflow
-# deploy_workflow=$(curl  -H "Accept: application/vnd.github+json" -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/repos/hanchiang/market-data-notification/actions/workflows |  jq '.workflows[] | select(.state == "active" and select(.name | ascii_downcase | contains("build and deploy")))')
-# printf "\n"
+deploy_workflow=$(curl  -H "Accept: application/vnd.github+json" -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/repos/hanchiang/market-data-notification/actions/workflows |  jq '.workflows[] | select(.state == "active" and select(.name | ascii_downcase | contains("build and deploy")))')
+printf "\n"
 
-# workflow_id=$(echo $deploy_workflow | jq -r .id)
-# curl -X POST  -H "Accept: application/vnd.github+json" -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/repos/hanchiang/market-data-notification/actions/workflows/$workflow_id/dispatches \
-#  -d '{"ref":"master"}'
-# printf "\n"
+workflow_id=$(echo $deploy_workflow | jq -r .id)
+curl -X POST  -H "Accept: application/vnd.github+json" -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/repos/hanchiang/market-data-notification/actions/workflows/$workflow_id/dispatches \
+ -d '{"ref":"master"}'
+printf "\n"
 
 echo "Script completed in $SECONDS seconds"
