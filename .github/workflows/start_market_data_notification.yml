@@ -147,10 +147,10 @@ jobs:
         id: start_script
         env:
           SSH_USER: ${{ secrets.SSH_USER }}
-          GITHUB_DEPLOY_TOKEN: ${{ secrets.GITHUB_DEPLOY_TOKEN }}
+          MARKET_DATA_NOTIFICATION_DEPLOY_TOKEN: ${{ secrets.MARKET_DATA_NOTIFICATION_DEPLOY_TOKEN }}
         run: | 
           cd instances
-          ./scripts/start.sh $GITHUB_DEPLOY_TOKEN $SSH_USER ~/.ssh/market_data_notification_rsa
+          ./scripts/start.sh $MARKET_DATA_NOTIFICATION_DEPLOY_TOKEN $SSH_USER ~/.ssh/market_data_notification_rsa
 
           sudo rm -rf ./instances/ansible/vars.yml ./instances/ansible/aws_ec2.yml ~/.ssh ~/.aws
   notify_unsuccessful:
