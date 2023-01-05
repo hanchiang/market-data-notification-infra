@@ -69,6 +69,10 @@ build {
     }
 
     provisioner "shell" {
+      scripts = ["./scripts/install-redis.sh"]
+    }
+
+    provisioner "shell" {
       scripts = ["./scripts/install-docker.sh"]
       env = {
         USER: "han"
