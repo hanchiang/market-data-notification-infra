@@ -2,8 +2,8 @@ name: Stop Market data notification
 on:
   schedule:
     # run time is usually delayed around 15mins
-    - cron: '5 14,15 * * 1-5' # weekdays
-    - cron: '45 21,22 * * 1-5' # weekdays
+    - cron: '5 13,14 * * 1-5' # weekdays
+    - cron: '45 20,21 * * 1-5' # weekdays
   workflow_dispatch:
     inputs:
       logLevel:

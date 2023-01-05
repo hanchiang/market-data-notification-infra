@@ -2,8 +2,8 @@ name: Start Market data notification
 on:
   schedule:
     # run time is usually delayed around 15mins
-    - cron: '55 12,13 * * 1-5' # weekdays
-    - cron: '25 20,21 * * 1-5' # weekdays
+    - cron: '55 11,12 * * 1-5' # weekdays
+    - cron: '25 19,20 * * 1-5' # weekdays
   workflow_dispatch:
     inputs:
       logLevel:
