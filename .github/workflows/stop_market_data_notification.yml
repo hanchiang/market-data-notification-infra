@@ -63,7 +63,7 @@ jobs:
           sudo timedatectl set-timezone $TZ
           sudo timedatectl status
           hour=$(date +%H)
-          if [ $hour != $MARKET_OPEN_START_LOCAL_HOUR ] || [ $hour != $MARKET_CLOSE_START_LOCAL_HOUR ]
+          if [ $hour != $MARKET_OPEN_START_LOCAL_HOUR ] && [ $hour != $MARKET_CLOSE_START_LOCAL_HOUR ]
           then
             exit 0
           fi
