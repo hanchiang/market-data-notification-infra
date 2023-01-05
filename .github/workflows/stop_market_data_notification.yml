@@ -3,7 +3,7 @@ on:
   schedule:
     # run time is usually delayed around 15mins
     - cron: '5 13,14 * * 1-5' # weekdays
-    - cron: '45 20,21 * * 1-5' # weekdays
+    - cron: '35 20,21 * * 1-5' # weekdays
   workflow_dispatch:
     inputs:
       logLevel:
@@ -63,7 +63,7 @@ jobs:
           sudo timedatectl set-timezone $TZ
           sudo timedatectl status
           hour=$(date +%H)
-          if [ $hour != $MARKET_OPEN_START_LOCAL_HOUR ] && [ $hour != $MARKET_CLOSE_START_LOCAL_HOUR ]
+          if [ $hour != $MARKET_OPEN_STOP_LOCAL_HOUR ] && [ $hour != $MARKET_CLOSE_STOP_LOCAL_HOUR ]
           then
             exit 0
           fi
