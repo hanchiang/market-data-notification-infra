@@ -18,6 +18,11 @@ supervised systemd
 
 maxmemory 50mb
 maxmemory-policy allkeys-lfu
+
+# Snapshot after 300 seconds if at least 1 change is performed
+save 300 1
+
+appendonly yes
 EOF
 
 sudo systemctl enable redis-server
