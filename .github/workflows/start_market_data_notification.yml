@@ -2,8 +2,9 @@ name: Start Market data notification
 on:
   schedule:
     # run time is usually delayed around 15mins
-    - cron: '55 11,12 * * 1-5' # weekdays
-    - cron: '25 19,20 * * 1-5' # weekdays
+    # TODO: set to weekdays only
+    - cron: '55 11,12 * * 1-7' # weekdays
+    - cron: '25 19,20 * * 1-7' # weekdays
   workflow_dispatch:
     inputs:
       logLevel:
@@ -63,6 +64,7 @@ jobs:
           sudo timedatectl set-timezone $TZ
           sudo timedatectl status
           hour=$(date +%H)
+          echo "hour: $hour, MARKET_OPEN_START_LOCAL_HOUR: $MARKET_OPEN_START_LOCAL_HOUR, MARKET_CLOSE_START_LOCAL_HOUR: $MARKET_CLOSE_START_LOCAL_HOUR"
           if [ $hour != $MARKET_OPEN_START_LOCAL_HOUR ] && [ $hour != $MARKET_CLOSE_START_LOCAL_HOUR ]
           then
             exit 0
