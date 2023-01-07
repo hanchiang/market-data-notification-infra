@@ -14,7 +14,7 @@ instance_id=$(echo $instance_info | jq -r .'id')
 
 if [ "$instance_state" = "running" ]
 then
-    DOMAINS=("api.marketdata.yaphc.com" "go.yaphc.com")
+    DOMAINS=("api.marketdata.yaphc.com")
     for domain in "${DOMAINS[@]}"
     do
         ./route53/update-ec2-route53.sh $domain "DELETE"
