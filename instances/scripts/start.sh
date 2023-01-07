@@ -51,7 +51,7 @@ wait_for_ec2_stop () {
         echo "Instance is already stopped"
         return 0
     else
-        local seconds_to_wait=120
+        local seconds_to_wait=180
 
         start=$(date +%s)
         time_elapsed=$(get_time_elapsed $start | tail -n 1)
@@ -90,7 +90,7 @@ start_ec2() {
         return 0
     fi
 
-    local seconds_to_wait=120
+    local seconds_to_wait=180
 
     start=$(date +%s)
     time_elapsed=$(get_time_elapsed $start | tail -n 1)
