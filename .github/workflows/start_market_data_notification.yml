@@ -37,9 +37,9 @@ jobs:
           health_check=$(curl $HOST_NAME/healthz || true)
           if [ -n "$health_check" ]
           then
-            echo "::set-output name=outcome::success"
+            echo "outcome=success" >> $GITHUB_OUTPUT
           else
-            echo "::set-output name=outcome::failure"
+            echo "outcome=failure" >> $GITHUB_OUTPUT
           fi
   notify_already_running:
     runs-on: ubuntu-latest

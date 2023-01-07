@@ -37,9 +37,9 @@ jobs:
           health_check=$(curl $HOST_NAME || true)
           if [ -z "$health_check" ]
           then
-            echo "::set-output name=outcome::failure"
+            echo "outcome=failure" >> $GITHUB_OUTPUT
           else
-            echo "::set-output name=outcome::success"
+            echo "outcome=success" >> $GITHUB_OUTPUT
           fi
   notify_ec2_already_stopped:
     runs-on: ubuntu-latest
