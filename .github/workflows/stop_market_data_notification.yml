@@ -37,9 +37,9 @@ jobs:
           echo "hour: $hour, MARKET_OPEN_STOP_LOCAL_HOUR: $MARKET_OPEN_STOP_LOCAL_HOUR, MARKET_CLOSE_STOP_LOCAL_HOUR: $MARKET_CLOSE_STOP_LOCAL_HOUR"
           if [ $hour != $MARKET_OPEN_STOP_LOCAL_HOUR ] && [ $hour != $MARKET_CLOSE_STOP_LOCAL_HOUR ]
           then
-            echo "should_proceed=true" >> $GITHUB_OUTPUT
-          else
             echo "should_proceed=false" >> $GITHUB_OUTPUT
+          else
+            echo "should_proceed=true" >> $GITHUB_OUTPUT
           fi
   health_check:
     runs-on: ubuntu-latest
