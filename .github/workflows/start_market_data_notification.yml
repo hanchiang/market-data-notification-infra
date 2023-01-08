@@ -23,9 +23,28 @@ env:
   MARKET_OPEN_START_LOCAL_HOUR: 8
   MARKET_CLOSE_START_LOCAL_HOUR: 15
 jobs:
+  check_timezone:
+    runs-on: ubuntu-latest
+    outputs:
+      should_proceed: ${{ steps.check_timezone.outputs.should_proceed }}
+    steps:
+      - name: Continue running only if current time is local time
+        id: check_timezone
+        run: |
+          sudo timedatectl set-timezone $TZ
+          sudo timedatectl status
+          hour=$(date +%H)
+          echo "hour: $hour, MARKET_OPEN_START_LOCAL_HOUR: $MARKET_OPEN_START_LOCAL_HOUR, MARKET_CLOSE_START_LOCAL_HOUR: $MARKET_CLOSE_START_LOCAL_HOUR"
+          if [ $hour != $MARKET_OPEN_START_LOCAL_HOUR ] && [ $hour != $MARKET_CLOSE_START_LOCAL_HOUR ]
+          then
+            echo "should_proceed=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_proceed=false" >> $GITHUB_OUTPUT
+          fi
   health_check:
     runs-on: ubuntu-latest
-    continue-on-error: true
+    needs: [check_timezone]
+    if: ${{ needs.check_timezone.outputs.should_proceed == 'true' }}
     outputs:
       health_check_outcome: ${{ steps.health_check.outputs.outcome }}
     env:
@@ -55,25 +74,10 @@ jobs:
           text=$(echo "\[Github action\] Market data notification infra: Market data notification is already running at $now. Workflow: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" | sed 's~[[:blank:]]~%20~g')
           curl "https://api.telegram.org/bot${TELEGRAM_DEV_BOT_TOKEN}/sendMessage?chat_id=${TELEGRAM_DEV_ID}&text=$text"
           exit 0
-  check_timezone:
+  start_ec2_and_deploy:
     runs-on: ubuntu-latest
     needs: [health_check]
     if: ${{ needs.health_check.outputs.health_check_outcome == 'failure' }}
-    steps:
-      - name: Continue running only if current time is local time
-        id: check_time
-        run: |
-          sudo timedatectl set-timezone $TZ
-          sudo timedatectl status
-          hour=$(date +%H)
-          echo "hour: $hour, MARKET_OPEN_START_LOCAL_HOUR: $MARKET_OPEN_START_LOCAL_HOUR, MARKET_CLOSE_START_LOCAL_HOUR: $MARKET_CLOSE_START_LOCAL_HOUR"
-          if [ $hour != $MARKET_OPEN_START_LOCAL_HOUR ] && [ $hour != $MARKET_CLOSE_START_LOCAL_HOUR ]
-          then
-            exit 0
-          fi
-  start_ec2_and_deploy:
-    runs-on: ubuntu-latest
-    needs: [check_timezone]
     env:
       DOMAIN: ${{ secrets.DOMAIN }}
       SSH_USER: ${{ secrets.SSH_USER }}
