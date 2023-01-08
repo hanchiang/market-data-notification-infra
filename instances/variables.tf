@@ -23,16 +23,17 @@ variable "ec2_az" {
 
 variable "ssh_private_key_path" {
   description = "Private SSH key for EC2"
-  default = "/Users/hanchiang/.ssh/market_data_notification_rsa"
+  type = string
+  sensitive = true
 }
 
 variable "ssh_public_key_path" {
   description = "Public SSH key for EC2"
-  default = "/Users/hanchiang/.ssh/market_data_notification_rsa.pub"
+  type = string
 }
 
 variable "ssh_user" {
-  default = "han"
+  type = string
 }
 
 
