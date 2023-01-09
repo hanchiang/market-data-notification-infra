@@ -35,7 +35,7 @@ jobs:
           sudo timedatectl status
           hour=$(date +%H)
           echo "hour: $hour, MARKET_OPEN_STOP_LOCAL_HOUR: $MARKET_OPEN_STOP_LOCAL_HOUR, MARKET_CLOSE_STOP_LOCAL_HOUR: $MARKET_CLOSE_STOP_LOCAL_HOUR"
-          if [ $hour != $MARKET_OPEN_STOP_LOCAL_HOUR ] && [ $hour != $MARKET_CLOSE_STOP_LOCAL_HOUR ]
+          if [ $hour -ne $MARKET_OPEN_STOP_LOCAL_HOUR ] && [ $hour -ne $MARKET_CLOSE_STOP_LOCAL_HOUR ]
           then
             echo "should_proceed=false" >> $GITHUB_OUTPUT
           else
