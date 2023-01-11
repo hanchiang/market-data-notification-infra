@@ -4,7 +4,7 @@ on:
     # run time is usually delayed around 15mins
     # TODO: set to weekdays only. 0 = sunday, 6 = saturday
     - cron: '59 11,12 * * 0-6' # weekdays
-    - cron: '25 19,20 * * 0-6' # weekdays
+    - cron: '15 19,20 * * 0-6' # weekdays
   workflow_dispatch:
     inputs:
       logLevel:
