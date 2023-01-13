@@ -161,6 +161,8 @@ do
     printf "\n"
 done
 
+sleep 10
+
 # Configure EC2
 ../ansible/start.sh $SSH_USER $SSH_PRIVATE_KEY_PATH 
 
