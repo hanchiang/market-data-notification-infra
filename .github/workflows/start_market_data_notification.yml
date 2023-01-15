@@ -1,8 +1,8 @@
 name: Start Market data notification
 on:
   schedule:
-    # run time is usually delayed around 15mins
-    # TODO: set to weekdays only. 0 = sunday, 6 = saturday
+    # run time is usually delayed around 15-25mins
+    # 0 = sunday, 6 = saturday
     - cron: '59 11,12 * * 0-6' # weekdays
     - cron: '15 19,20 * * 0-6' # weekdays
   workflow_dispatch:
