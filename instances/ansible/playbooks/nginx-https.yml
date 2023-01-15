@@ -38,13 +38,20 @@
         SSL_CERT_FILE_PATH="/etc/ssl/{{ item }}/certificate.crt"
         SSL_KEY_FILE_PATH="/etc/ssl/{{ item }}/private.key"
 
-        if [ -f "$SSL_CERT_FILE_PATH" ] && [ -f "$SSL_KEY_FILE_PATH" ]
+        # save a backup of nginx config
+        echo "Saving a backup of /etc/nginx/sites-available/{{ DOMAIN }}"
+        cp /etc/nginx/sites-available/{{ DOMAIN }} /etc/nginx/sites-available/{{ DOMAIN }}.bak
+
+        if [ -s "$SSL_CERT_FILE_PATH" ] && [ -s "$SSL_KEY_FILE_PATH" ]
         then
           echo "SSL certs already exist for {{ item }}"
         else
-          ~/.acme.sh/acme.sh --issue -d {{ item }} --nginx
+          # replace symlinked nginx config, so that in case of an error
+          # the script can be run again without problem
+          cp /etc/nginx/sites-available/{{ item }}.bak /etc/nginx/sites-available/{{ item }}
+          ~/.acme.sh/acme.sh --issue --nginx -d {{ item }}
           ~/.acme.sh/acme.sh --install-cert -d {{ item }} --key-file $SSL_KEY_FILE_PATH \
-          --fullchain-file $SSL_CERT_FILE_PATH --reloadcmd "sudo systemctl reload nginx"
+          --fullchain-file $SSL_CERT_FILE_PATH --reloadcmd "sudo systemctl force-reload nginx"
           sleep 20
         fi
         # Run cron to renew certs to verify result
