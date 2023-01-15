@@ -37,4 +37,4 @@ Rerun the latest deploy job in github action
 
 # Operational hours
 Market data notification will run from:
-* 1pm UTC - 9pm UTC on weekdays
+* 8.15am - 9.15am, 3.30pm - 4.45pm in US timezone every day
