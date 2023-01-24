@@ -67,12 +67,12 @@ jobs:
     steps:
       - name: Send telegram notification EC2 is already stopped
         env:
-          TELEGRAM_DEV_BOT_TOKEN: ${{ secrets.TELEGRAM_DEV_BOT_TOKEN }}
-          TELEGRAM_DEV_ID: ${{ secrets.TELEGRAM_DEV_ID }}
+          STOCKS_TELEGRAM_DEV_BOT_TOKEN: ${{ secrets.STOCKS_TELEGRAM_DEV_BOT_TOKEN }}
+          STOCKS_TELEGRAM_DEV_ID: ${{ secrets.STOCKS_TELEGRAM_DEV_ID }}
         run: |
           now=$(date +%Y-%m-%dT%H:%M:%S)
           text=$(echo "\[Github action\] Market data notification infra: EC2 is already stopped at $now. Workflow: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" | sed 's~[[:blank:]]~%20~g')
-          curl "https://api.telegram.org/bot${TELEGRAM_DEV_BOT_TOKEN}/sendMessage?chat_id=${TELEGRAM_DEV_ID}&text=$text"
+          curl "https://api.telegram.org/bot${STOCKS_TELEGRAM_DEV_BOT_TOKEN}/sendMessage?chat_id=${STOCKS_TELEGRAM_DEV_ID}&text=$text"
           exit 0
   stop_ec2:
     runs-on: ubuntu-latest
@@ -116,12 +116,12 @@ jobs:
     steps:
       - name: Send telegram notification unsuccessful run
         env:
-          TELEGRAM_DEV_BOT_TOKEN: ${{ secrets.TELEGRAM_DEV_BOT_TOKEN }}
-          TELEGRAM_DEV_ID: ${{ secrets.TELEGRAM_DEV_ID }}
+          STOCKS_TELEGRAM_DEV_BOT_TOKEN: ${{ secrets.STOCKS_TELEGRAM_DEV_BOT_TOKEN }}
+          STOCKS_TELEGRAM_DEV_ID: ${{ secrets.STOCKS_TELEGRAM_DEV_ID }}
         run: |
           now=$(date +%Y-%m-%dT%H:%M:%S)
           text=$(echo "\[Github action\] Market data notification infra: Failed to stop EC2 at $now. Workflow: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" | sed 's~[[:blank:]]~%20~g')
-          curl "https://api.telegram.org/bot${TELEGRAM_DEV_BOT_TOKEN}/sendMessage?chat_id=${TELEGRAM_DEV_ID}&text=$text"
+          curl "https://api.telegram.org/bot${STOCKS_TELEGRAM_DEV_BOT_TOKEN}/sendMessage?chat_id=${STOCKS_TELEGRAM_DEV_ID}&text=$text"
   notify_successful_run:
     runs-on: ubuntu-latest
     needs: [stop_ec2]
@@ -129,9 +129,9 @@ jobs:
     steps:
       - name: Send telegram notification successful run
         env:
-          TELEGRAM_DEV_BOT_TOKEN: ${{ secrets.TELEGRAM_DEV_BOT_TOKEN }}
-          TELEGRAM_DEV_ID: ${{ secrets.TELEGRAM_DEV_ID }}
+          STOCKS_TELEGRAM_DEV_BOT_TOKEN: ${{ secrets.STOCKS_TELEGRAM_DEV_BOT_TOKEN }}
+          STOCKS_TELEGRAM_DEV_ID: ${{ secrets.STOCKS_TELEGRAM_DEV_ID }}
         run: |
           now=$(date +%Y-%m-%dT%H:%M:%S)
           text=$(echo "\[Github action\] Market data notification infra: Successfully stopped EC2 at $now. Workflow: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" | sed 's~[[:blank:]]~%20~g')
-          curl "https://api.telegram.org/bot${TELEGRAM_DEV_BOT_TOKEN}/sendMessage?chat_id=${TELEGRAM_DEV_ID}&text=$text"
+          curl "https://api.telegram.org/bot${STOCKS_TELEGRAM_DEV_BOT_TOKEN}/sendMessage?chat_id=${STOCKS_TELEGRAM_DEV_ID}&text=$text"

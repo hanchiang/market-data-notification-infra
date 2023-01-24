@@ -67,12 +67,12 @@ jobs:
     steps:
       - name: Send telegram notification Market data notification is already running
         env:
-          TELEGRAM_DEV_BOT_TOKEN: ${{ secrets.TELEGRAM_DEV_BOT_TOKEN }}
-          TELEGRAM_DEV_ID: ${{ secrets.TELEGRAM_DEV_ID }}
+          STOCKS_TELEGRAM_DEV_BOT_TOKEN: ${{ secrets.STOCKS_TELEGRAM_DEV_BOT_TOKEN }}
+          STOCKS_TELEGRAM_DEV_ID: ${{ secrets.STOCKS_TELEGRAM_DEV_ID }}
         run: |
           now=$(date +%Y-%m-%dT%H:%M:%S)
           text=$(echo "\[Github action\] Market data notification infra: Market data notification is already running at $now. Workflow: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" | sed 's~[[:blank:]]~%20~g')
-          curl "https://api.telegram.org/bot${TELEGRAM_DEV_BOT_TOKEN}/sendMessage?chat_id=${TELEGRAM_DEV_ID}&text=$text"
+          curl "https://api.telegram.org/bot${STOCKS_TELEGRAM_DEV_BOT_TOKEN}/sendMessage?chat_id=${STOCKS_TELEGRAM_DEV_ID}&text=$text"
           exit 0
   start_ec2_and_deploy:
     runs-on: ubuntu-latest
@@ -188,12 +188,12 @@ jobs:
     steps:
       - name: Send telegram notification unsuccessful run
         env:
-          TELEGRAM_DEV_BOT_TOKEN: ${{ secrets.TELEGRAM_DEV_BOT_TOKEN }}
-          TELEGRAM_DEV_ID: ${{ secrets.TELEGRAM_DEV_ID }}
+          STOCKS_TELEGRAM_DEV_BOT_TOKEN: ${{ secrets.STOCKS_TELEGRAM_DEV_BOT_TOKEN }}
+          STOCKS_TELEGRAM_DEV_ID: ${{ secrets.STOCKS_TELEGRAM_DEV_ID }}
         run: |
           now=$(date +%Y-%m-%dT%H:%M:%S)
           text=$(echo "\[Github action\] Market data notification infra: Failed to start EC2 and deploy Market data notification at $now. Workflow: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" | sed 's~[[:blank:]]~%20~g')
-          curl "https://api.telegram.org/bot${TELEGRAM_DEV_BOT_TOKEN}/sendMessage?chat_id=${TELEGRAM_DEV_ID}&text=$text"
+          curl "https://api.telegram.org/bot${STOCKS_TELEGRAM_DEV_BOT_TOKEN}/sendMessage?chat_id=${STOCKS_TELEGRAM_DEV_ID}&text=$text"
   notify_successful:
     runs-on: ubuntu-latest
     needs: [start_ec2_and_deploy]
@@ -201,9 +201,9 @@ jobs:
     steps:
       - name: Send telegram notification successful run
         env:
-          TELEGRAM_DEV_BOT_TOKEN: ${{ secrets.TELEGRAM_DEV_BOT_TOKEN }}
-          TELEGRAM_DEV_ID: ${{ secrets.TELEGRAM_DEV_ID }}
+          STOCKS_TELEGRAM_DEV_BOT_TOKEN: ${{ secrets.STOCKS_TELEGRAM_DEV_BOT_TOKEN }}
+          STOCKS_TELEGRAM_DEV_ID: ${{ secrets.STOCKS_TELEGRAM_DEV_ID }}
         run: |
           now=$(date +%Y-%m-%dT%H:%M:%S)
           text=$(echo "\[Github action\] Market data notification infra: Successfully started EC2 and deployed Market data notification at $now. Workflow: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" | sed 's~[[:blank:]]~%20~g')
-          curl "https://api.telegram.org/bot${TELEGRAM_DEV_BOT_TOKEN}/sendMessage?chat_id=${TELEGRAM_DEV_ID}&text=$text"
+          curl "https://api.telegram.org/bot${STOCKS_TELEGRAM_DEV_BOT_TOKEN}/sendMessage?chat_id=${STOCKS_TELEGRAM_DEV_ID}&text=$text"
