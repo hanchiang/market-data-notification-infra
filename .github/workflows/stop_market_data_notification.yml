@@ -1,9 +1,9 @@
 name: Stop Market data notification
 on:
   schedule:
-    # run time is usually delayed around 15-25mins
+    # run time is usually delayed by up to 30mins
     # 0 = sunday, 6 = saturday
-    - cron: '5 13,14 * * 0-6' # weekdays
+    - cron: '15 13,14 * * 0-6' # weekdays
     - cron: '35 20,21 * * 0-6' # weekdays
   workflow_dispatch:
     inputs:
@@ -19,7 +19,7 @@ on:
 env:
   TZ: America/New_York
   # Market open at 9.30am and close at 4pm local time
-  # Run before market open(8am - 9am) and close(3.45pm - 4.45pm)
+  # Run before market open(8.30am - 9.30am) and close(3.45pm - 4.45pm)
   MARKET_OPEN_STOP_LOCAL_HOUR: 9
   MARKET_CLOSE_STOP_LOCAL_HOUR: 16
 jobs:
