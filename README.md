@@ -1,7 +1,7 @@
-This project is the infrastructure as code management for [Market data notification](https://github.com/hanchiang/market-data-notification) using AWS.
+![Start workflow](https://github.com/hanchiang/market-data-notification-infra/actions/workflows/start_market_data_notification.yml/badge.svg)
+![Stop workflow](https://github.com/hanchiang/market-data-notification-infra/actions/workflows/stop_market_data_notification.yml/badge.svg)
 
-![example workflow](https://github.com/hanchiang/market-data-notification-infra/actions/workflows/start_market_data_notification.yml/badge.svg)
-![example workflow](https://github.com/hanchiang/market-data-notification-infra/actions/workflows/stop_market_data_notification.yml/badge.svg)
+This project is the infrastructure as code management for [Market data notification](https://github.com/hanchiang/market-data-notification) using AWS.
 
 # Structure
 * `images/`: Packer files for building AMI
