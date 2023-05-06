@@ -1,5 +1,5 @@
 {
-    "Comment": "Upsert route53 record for url_shortener",
+    "Comment": "Upsert route53 record for market_data_notification",
     "Changes": [
         {
             "Action": "<ACTION>",

@@ -64,3 +64,5 @@ instances/ansible/vars.yml
 instances/scripts/route53/change-record-set.json
 adhoc_scripts/
 observability/grafana
+my_readme.txt
+route53.bak
