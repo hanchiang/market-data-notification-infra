@@ -3,8 +3,8 @@ on:
   schedule:
     # run time is usually delayed by up to 30mins
     # 0 = sunday, 6 = saturday
-    - cron: '15 12,13 * * 0-6' # weekdays
-    - cron: '15 19,20 * * 0-6' # weekdays
+    - cron: '05 12,13 * * 0-6' # weekdays
+    - cron: '05 19,20 * * 0-6' # weekdays
   workflow_dispatch:
     inputs:
       logLevel:
