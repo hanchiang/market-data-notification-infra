@@ -16,8 +16,8 @@
       shell: |
         export DEBIAN_FRONTEND=noninteractive
 
-        apt-get -y install socat
-        curl https://get.acme.sh | sh -s email={{ ADMIN_EMAIL }}
+        apt-get -y install certbot
+        apt-get -y install python3-certbot-nginx
     - debug: var=install_required_packages.stdout_lines
     - debug: var=install_required_packages.stderr_lines
 
@@ -35,27 +35,31 @@
       shell: |
         mkdir -p /etc/ssl/{{ item }}
 
-        SSL_CERT_FILE_PATH="/etc/ssl/{{ item }}/certificate.crt"
-        SSL_KEY_FILE_PATH="/etc/ssl/{{ item }}/private.key"
-
-        # save a backup of nginx config
-        echo "Saving a backup of /etc/nginx/sites-available/{{ DOMAIN }}"
-        cp /etc/nginx/sites-available/{{ DOMAIN }} /etc/nginx/sites-available/{{ DOMAIN }}.bak
+        SSL_CERT_FILE_PATH="/etc/letsencrypt/live/{{ item }}/cert.pem"
+        SSL_KEY_FILE_PATH="/etc/letsencrypt/live/{{ item }}/privkey.pem"
 
         if [ -s "$SSL_CERT_FILE_PATH" ] && [ -s "$SSL_KEY_FILE_PATH" ]
         then
           echo "SSL certs already exist for {{ item }}"
         else
-          # replace symlinked nginx config, so that in case of an error
-          # the script can be run again without problem
-          cp /etc/nginx/sites-available/{{ item }}.bak /etc/nginx/sites-available/{{ item }}
-          ~/.acme.sh/acme.sh --issue --nginx -d {{ item }}
-          ~/.acme.sh/acme.sh --install-cert -d {{ item }} --key-file $SSL_KEY_FILE_PATH \
-          --fullchain-file $SSL_CERT_FILE_PATH --reloadcmd "sudo systemctl force-reload nginx"
-          sleep 20
+          # save a backup of nginx config
+          echo "Saving a backup of /etc/nginx/sites-available/{{ DOMAIN }}"
+          cp /etc/nginx/sites-available/{{ DOMAIN }} /etc/nginx/sites-available/{{ DOMAIN }}.bak
+
+          certbot --nginx -d {{ item }} --non-interactive --agree-tos -m {{ ADMIN_EMAIL }}
+
+          sudo systemctl force-reload nginx
+          sleep 10
         fi
-        # Run cron to renew certs to verify result
-        ~/.acme.sh/acme.sh --cron
+
+        # cron
+        crontab -l > mycron
+        echo "0 12-23 * * * /usr/bin/certbot --quiet renew" >> mycron
+
+        mv mycron mycron.temp
+        cat mycron.temp | sort | uniq > mycron
+        cp mycron mycron.bak
+        crontab mycron
     - debug:
         var: item.stdout_lines
       loop: "{{ install_ssl.results }}"
@@ -135,6 +139,9 @@
         executable: /bin/bash
       register: update_nginx_config
       shell: |
+        SSL_CERT_FILE_PATH="/etc/letsencrypt/live/{{ DOMAIN }}/cert.pem"
+        SSL_KEY_FILE_PATH="/etc/letsencrypt/live/{{ DOMAIN }}/privkey.pem"
+
         cat <<EOF | sudo tee /etc/nginx/sites-available/{{ DOMAIN }} > /dev/null
         include /etc/nginx/common/market_data_notification_upstream.conf;
 
@@ -154,8 +161,8 @@
         server {
           listen 443 ssl;
 
-          ssl_certificate      /etc/ssl/{{ DOMAIN }}/certificate.crt;
-          ssl_certificate_key  /etc/ssl/{{ DOMAIN }}/private.key;
+          ssl_certificate      $SSL_CERT_FILE_PATH;
+          ssl_certificate_key  $SSL_KEY_FILE_PATH;
 
           server_name {{ DOMAIN }};
 
