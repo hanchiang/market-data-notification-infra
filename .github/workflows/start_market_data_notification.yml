@@ -16,6 +16,9 @@ on:
         - info
         - warning
         - debug
+      ignoreTimezone:
+        description: 'Run the workflow, disregarding the scheduled time it is supposed to run'
+        type: boolean
 env:
   TZ: America/New_York
   # Market open at 9.30am and close at 4pm local time
@@ -31,6 +34,12 @@ jobs:
       - name: Continue running only if current time is local time
         id: check_timezone
         run: |
+          if [ ${{ inputs.ignoreTimezone }} ]
+          then
+            echo "should_proceed=true" >> $GITHUB_OUTPUT
+            echo "Ignore timezone"
+            exit 0
+          fi
           sudo timedatectl set-timezone $TZ
           sudo timedatectl status
           hour=$(date +%H)
