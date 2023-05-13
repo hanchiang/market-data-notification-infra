@@ -1,5 +1,7 @@
 #!/bin/bash
 
+sudo apt-get -y install zip
+
 # Setup sudo to allow no-password sudo for "admin" group and adding "han" user
 sudo groupadd -r admin
 sudo useradd -m -s /bin/bash $USER
