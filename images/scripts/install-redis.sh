@@ -16,11 +16,11 @@ sudo tee -a /etc/redis/redis.conf <<< "include /etc/redis/conf.d/redis.conf" > /
 sudo tee -a /etc/redis/conf.d/redis.conf > /dev/null << EOF
 supervised systemd
 
-maxmemory 50mb
+maxmemory 100mb
 maxmemory-policy allkeys-lfu
 
-# Snapshot after 300 seconds if at least 1 change is performed
-save 300 1
+# Snapshot after 60 seconds if at least 1 change is performed
+save 60 1
 
 appendonly yes
 EOF
