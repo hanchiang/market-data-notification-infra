@@ -13,7 +13,7 @@ variable "region"{
 
 variable "ec2_instance_type" {
   description = "Instance type"
-  default = "t2.micro"
+  default = "t4g.micro"
 }
 
 variable "ec2_az" {

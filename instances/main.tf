@@ -103,10 +103,13 @@ resource "aws_instance" "web" {
   vpc_security_group_ids      = [aws_security_group.sg_22_80_443.id]
   availability_zone = var.ec2_az
   associate_public_ip_address = true
+  credit_specification {
+    cpu_credits = "standard"
+  }
 
   root_block_device {
     delete_on_termination = true
-    volume_size = 8
+    volume_size = 20
     volume_type = "gp2"
 
     tags = {
