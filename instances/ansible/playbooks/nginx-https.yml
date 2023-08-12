@@ -16,8 +16,8 @@
       shell: |
         export DEBIAN_FRONTEND=noninteractive
 
-        apt-get -y install certbot
-        apt-get -y install python3-certbot-nginx
+        apt -y install certbot
+        apt -y install python3-certbot-nginx
     - debug: var=install_required_packages.stdout_lines
     - debug: var=install_required_packages.stderr_lines
 
@@ -33,9 +33,9 @@
       poll: 15
       loop: "{{ DOMAINS }}"
       shell: |
-        mkdir -p /etc/ssl/{{ item }}
+        mkdir -p /etc/letsencrypt/live/{{ item }}
 
-        SSL_CERT_FILE_PATH="/etc/letsencrypt/live/{{ item }}/cert.pem"
+        SSL_CERT_FILE_PATH="/etc/letsencrypt/live/{{ item }}/fullchain.pem"
         SSL_KEY_FILE_PATH="/etc/letsencrypt/live/{{ item }}/privkey.pem"
 
         if [ -s "$SSL_CERT_FILE_PATH" ] && [ -s "$SSL_KEY_FILE_PATH" ]
@@ -48,9 +48,11 @@
 
           certbot --nginx -d {{ item }} --non-interactive --agree-tos -m {{ ADMIN_EMAIL }}
 
-          sudo systemctl force-reload nginx
           sleep 10
         fi
+
+        sudo systemctl force-reload nginx
+        sudo certbot renew --dry-run
 
         # cron
         crontab -l > mycron
@@ -138,8 +140,9 @@
       args:
         executable: /bin/bash
       register: update_nginx_config
+      # TODO: https://stackoverflow.com/questions/25399814/how-can-a-single-nginx-virtual-server-deal-with-both-port-80-and-443
       shell: |
-        SSL_CERT_FILE_PATH="/etc/letsencrypt/live/{{ DOMAIN }}/cert.pem"
+        SSL_CERT_FILE_PATH="/etc/letsencrypt/live/{{ DOMAIN }}/fullchain.pem"
         SSL_KEY_FILE_PATH="/etc/letsencrypt/live/{{ DOMAIN }}/privkey.pem"
 
         cat <<EOF | sudo tee /etc/nginx/sites-available/{{ DOMAIN }} > /dev/null

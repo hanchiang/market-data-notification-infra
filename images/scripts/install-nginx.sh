@@ -3,21 +3,25 @@
 ### Install nginx
 echo "Installing nginx"
 NGINX_BRANCH="stable" # use nginx=development for latest development version
-NGINX_VERSION="1.18.0"
 
 sudo add-apt-repository -y ppa:nginx/$NGINX_BRANCH
-sudo apt-get update
-sudo apt-get -y install nginx=$NGINX_VERSION-3ubuntu1+focal2
+sudo apt update
+sudo apt -y install nginx
 
 sudo ufw --force enable
-sudo ufw allow 'Nginx Full'
-sudo ufw status
+sudo ufw allow 80
+sudo ufw allow 443
+sudo ufw status verbose
 
 sudo systemctl enable nginx
 sudo systemctl start nginx
 
 localhost=$(ip addr show eth0 | grep inet | awk '{ print $2; }' | sed 's/\/.*$//' | head -n 1)
 curl $localhost
+
+# copy letsencrypt folder
+sudo unzip $LETSENCRYPT_PATH -d /
+sudo rm -rf $LETSENCRYPT_PATH
 
 # Setup nginx server block
 sudo mkdir -p /var/www/$DOMAIN/html
