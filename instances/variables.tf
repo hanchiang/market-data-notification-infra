@@ -13,7 +13,7 @@ variable "region"{
 
 variable "ec2_instance_type" {
   description = "Instance type"
-  default = "t4g.micro"
+  default = "t4g.small"
 }
 
 variable "ec2_az" {
@@ -38,7 +38,7 @@ variable "ssh_user" {
 
 
 data "aws_ami" "ec2_ami" {
-  name_regex  = "^market_data_notification$"
+  name_regex  = "^market_data_notification_t4g_small$"
   most_recent = true
   owners      = ["self"]
 

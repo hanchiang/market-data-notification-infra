@@ -67,4 +67,6 @@ observability/grafana
 my_readme.txt
 route53.bak
 
+images/build.log
 instances/letsencrypt*
+instances/redis*
