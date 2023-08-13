@@ -32,7 +32,7 @@ variable "letsencrypt_dest_path" {
 # build blocks. A build block runs provisioners and post-processors on a
 # source.
 source "amazon-ebs" "market_data_notification" {
-  ami_name      = "market_data_notification_test"
+  ami_name      = "market_data_notification"
   instance_type = "t4g.micro"
   region        = var.region
   force_deregister   = true
@@ -50,7 +50,7 @@ source "amazon-ebs" "market_data_notification" {
   }
 
   tags = {
-    Name = "market_data_notification_test"
+    Name = "market_data_notification"
   }
 }
 
