@@ -32,8 +32,10 @@ Provision infra: `terraform apply`
 Everything from here onwards is handled in `instances/scripts/start.sh`
 
 ## 3. Run ansible script
-Run post-provisioning configurations such as configuring nginx SSL
+Run post-provisioning configurations such as setting up DNS, configuring nginx SSL
 
 ## 4. Deploy application
 Rerun the latest deploy job in github action
 
+# Workflow
+![Workflow](readme-images/infra-workflow.png)
