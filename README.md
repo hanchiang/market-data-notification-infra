@@ -15,21 +15,24 @@ This project is the infrastructure as code management for [Market data notificat
 
 # Workflow
 ## 1. Provision EC2 AMI using packer
-Provisions a EBS-backed EC2 AMI, and install the necessary softwares for [Market data notification](https://github.com/hanchiang/market-data-notification), e.g. docker, nginx
+Provisions a EBS-backed EC2 AMI, and install the necessary softwares for [Market data notification](https://github.com/hanchiang/market-data-notification):
+* redis
+* docker
+* nginx
 
-cd into [`images/`](images)
-Define variables that are declared in `image.pkr.hcl` in a new file `variables.auto.pkrvars.hcl`
+cd into [`images/`](images)  
+Define variables that are declared in `image.pkr.hcl` in a new file `variables.auto.pkrvars.hcl`  
 Build image: `packer build -machine-readable -var-file variables.auto.pkrvars.hcl image.pkr.hcl | tee build.log`
 
 ## 2. Provision EC2 using terraform
-cd into [`instances/`](instances)
-Copy the AMI ID from packer build, update it in `variables.tf`
+cd into [`instances/`](instances)  
+Copy the AMI ID from packer build, update it in `variables.tf`  
 Provision infra: `terraform apply`
 
 Everything from here onwards is handled in `instances/scripts/start.sh`
 
 ## 3. Run ansible script
-Run post-provisioning configurations such as nginx SSL
+Run post-provisioning configurations such as configuring nginx SSL
 
 ## 4. Deploy application
 Rerun the latest deploy job in github action
