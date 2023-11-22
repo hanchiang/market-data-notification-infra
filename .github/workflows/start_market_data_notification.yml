@@ -36,7 +36,7 @@ jobs:
       - name: Continue running only if current time is local time
         id: check_timezone
         run: |
-          if [ ${{ inputs.ignoreTimezone == 'true' }} ] || [ ${{ inputs.ignoreTimezone == true }} ]
+          if [ ${{ inputs.ignoreTimezone }} == 'true' ] || [ ${{ inputs.ignoreTimezone }} == true ]
           then
             echo "should_proceed=true" >> $GITHUB_OUTPUT
             echo "Ignore timezone"
