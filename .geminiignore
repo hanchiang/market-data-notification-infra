@@ -1,3 +1,6 @@
+# --- Version Control ---
+.git/
+
 # --- System & IDE ---
 .DS_Store
 ._*
@@ -5,18 +8,13 @@
 *.iml
 
 # --- Terraform ---
-# Local .terraform directories
-**/.terraform/*
-# .tfstate files
+**/.terraform/
 *.tfstate
 *.tfstate.*
-# CLI configuration files
 .terraformrc
 terraform.rc
-# Exclude all .tfvars files (sensitive)
 *.tfvars
 *.tfvars.json
-# Ignore override files
 override.tf
 override.tf.json
 *_override.tf
@@ -49,3 +47,10 @@ route53.bak
 adhoc_scripts/
 observability/grafana
 my_readme.txt
+
+# --- Media & Binary Assets (Ignored for Context) ---
+readme-images/
+images/**/*.png
+images/**/*.jpg
+images/**/*.jpeg
+images/**/*.gif
