@@ -1,4 +1,9 @@
 name: Start Market data notification
+concurrency:
+  group: market-data-notification-instance
+  cancel-in-progress: false
+permissions:
+  contents: read
 on:
   schedule:
     # run time is usually delayed by up to 30mins
@@ -35,16 +40,17 @@ jobs:
     steps:
       - name: Continue running only if current time is local time
         id: check_timezone
+        env:
+          IGNORE_TIMEZONE: ${{ github.event.inputs.ignoreTimezone || 'false' }}
         run: |
-          if [ ${{ inputs.ignoreTimezone }} == 'true' ] || [ ${{ inputs.ignoreTimezone }} == true ]
+          # Use TZ for date calculation only; do not mutate the runner timezone.
+          if [ "$IGNORE_TIMEZONE" = "true" ]
           then
             echo "should_proceed=true" >> $GITHUB_OUTPUT
             echo "Ignore timezone"
             exit 0
           fi
-          sudo timedatectl set-timezone $TZ
-          sudo timedatectl status
-          hour=$(date +%H)
+          hour=$(TZ=$TZ date +%H)
           echo "hour: $hour, MARKET_OPEN_START_LOCAL_HOUR: $MARKET_OPEN_START_LOCAL_HOUR, MARKET_CLOSE_START_LOCAL_HOUR: $MARKET_CLOSE_START_LOCAL_HOUR"
           if [ $hour -ne $MARKET_OPEN_START_LOCAL_HOUR ] && [ $hour -ne $MARKET_CLOSE_START_LOCAL_HOUR ]
           then
@@ -64,7 +70,7 @@ jobs:
       - name: Check if Market data notification is already running
         id: health_check
         run: |
-          health_check=$(curl $HOST_NAME/healthz || true)
+          health_check=$(curl -fsS $HOST_NAME/healthz || true)
           if [ -n "$health_check" ]
           then
             echo "outcome=success" >> $GITHUB_OUTPUT
@@ -94,8 +100,9 @@ jobs:
       SSH_USER: ${{ secrets.SSH_USER }}
       ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
       AWS_REGION: ${{ secrets.AWS_REGION }}
+      HOST_NAME: ${{ secrets.HOST_NAME }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Set up ansible
         env:
           AWS_ACCESS_KEY: ${{ secrets.AWS_ACCESS_KEY }}
@@ -190,8 +197,24 @@ jobs:
         run: | 
           cd instances
           ./scripts/start.sh $MARKET_DATA_NOTIFICATION_DEPLOY_TOKEN $SSH_USER ~/.ssh/market_data_notification_rsa
-
-          sudo rm -rf ./instances/ansible/vars.yml ./instances/ansible/aws_ec2.yml ~/.ssh ~/.aws
+      - name: Wait for deployed service health
+        run: |
+          # start.sh only dispatches backend deploy, so wait here for the service to become healthy.
+          for attempt in $(seq 1 30)
+          do
+            if curl -fsS "$HOST_NAME/healthz" > /dev/null
+            then
+              echo "market_data_notification is healthy"
+              exit 0
+            fi
+            echo "Waiting for backend deploy health, attempt $attempt"
+            sleep 20
+          done
+          echo "market_data_notification did not become healthy after start"
+          exit 1
+      - name: Cleanup temporary credentials
+        if: ${{ always() }}
+        run: sudo rm -rf ./instances/ansible/vars.yml ./instances/ansible/aws_ec2.yml ~/.ssh ~/.aws
   notify_unsuccessful:
     runs-on: ubuntu-latest
     needs: [start_ec2_and_deploy]
