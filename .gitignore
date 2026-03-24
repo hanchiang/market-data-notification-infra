@@ -44,6 +44,8 @@ instances/scripts/route53/change-record-set.json
 instances/letsencrypt*
 instances/redis*
 route53.bak
+ACTIVE_TASK.md
+ACTIVE_TASKS/
 
 # --- Adhoc & Misc ---
 adhoc_scripts/
