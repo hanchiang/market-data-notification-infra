@@ -1,5 +1,5 @@
 #! /bin/bash
-set -eu
+set -euo pipefail
 
 dir=$(dirname $0)
 cd $dir
@@ -120,35 +120,30 @@ start_ec2() {
     printf "\n"
 }
 
-get_latest_github_workflow_jobs_url () {
-    echo "Trigger deploy on github actions"
-    echo "Getting the latest github actions workflow"
+get_latest_successful_ci_sha () {
+    echo "Getting latest successful master CI run"
 
-    local latest_workflow
-    local workflow_id
-    local workflow_url
-    local workflow_created_at
-    local commit_message
-    local jobs_url
+    local latest_ci_run
+    local image_sha
 
-    latest_workflow=$(curl -H "Accept: application/vnd.github+json" -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/repos/hanchiang/market-data-notification/actions/runs\?branch=master\&per_page=100 | jq '[.workflow_runs[] | select(.name | ascii_downcase | contains("build and deploy"))][0]')
+    latest_ci_run=$(curl -fsSL -H "Accept: application/vnd.github+json" -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/repos/hanchiang/market-data-notification/actions/runs\?branch=master\&status=completed\&per_page=100 | jq '[.workflow_runs[] | select(.name | ascii_downcase | contains("test and build")) | select(.conclusion == "success")][0]')
     if [ "$?" -ne 0 ]
     then
         return 1
     fi
 
-    workflow_id=$(echo $latest_workflow | jq '.id')
-    workflow_url=$(echo $latest_workflow | jq -r '.url')
-    workflow_created_at=$(echo $latest_workflow | jq -r '.created_at')
-    commit_message=$(echo $latest_workflow | jq -r '.head_commit.message')
-    jobs_url=$(echo $latest_workflow | jq -r '.jobs_url')
+    image_sha=$(echo $latest_ci_run | jq -r '.head_sha')
+    if [ -z "$image_sha" ] || [ "$image_sha" = "null" ]
+    then
+        echo "Could not determine latest successful master CI SHA"
+        return 1
+    fi
 
-    echo "workflow url: $workflow_url, created at: $workflow_created_at"
-    echo $jobs_url
+    echo $image_sha
 }
 
 
-# Start EC2
+# Start EC2 first, then hand off the application rollout to the backend deploy workflow.
 wait_for_ec2_stop
 start_ec2
 
@@ -167,12 +162,18 @@ sleep 10
 ../ansible/start.sh $SSH_USER $SSH_PRIVATE_KEY_PATH 
 
 # Re-run deploy workflow
-deploy_workflow=$(curl  -H "Accept: application/vnd.github+json" -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/repos/hanchiang/market-data-notification/actions/workflows |  jq '.workflows[] | select(.state == "active" and select(.name | ascii_downcase | contains("build and deploy")))')
+deploy_image_sha=$(get_latest_successful_ci_sha | tail -n 1)
+if [ -z "$deploy_image_sha" ]
+then
+    echo "No deploy image SHA resolved from CI"
+    exit 1
+fi
+deploy_workflow=$(curl -fsSL -H "Accept: application/vnd.github+json" -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/repos/hanchiang/market-data-notification/actions/workflows | jq '.workflows[] | select(.state == "active" and select(.name | ascii_downcase | contains("build and deploy")))')
 printf "\n"
 
 workflow_id=$(echo $deploy_workflow | jq -r .id)
-curl -X POST  -H "Accept: application/vnd.github+json" -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/repos/hanchiang/market-data-notification/actions/workflows/$workflow_id/dispatches \
- -d '{"ref":"master"}'
+curl -fsSL -X POST  -H "Accept: application/vnd.github+json" -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/repos/hanchiang/market-data-notification/actions/workflows/$workflow_id/dispatches \
+ -d "{\"ref\":\"master\",\"inputs\":{\"image_sha\":\"$deploy_image_sha\"}}"
 printf "\n"
 
 echo "Script completed in $SECONDS seconds"

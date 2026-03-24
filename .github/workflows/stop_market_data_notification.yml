@@ -1,4 +1,9 @@
 name: Stop Market data notification
+concurrency:
+  group: market-data-notification-instance
+  cancel-in-progress: false
+permissions:
+  contents: read
 on:
   schedule:
     # run time is usually delayed by up to 30mins
@@ -35,16 +40,16 @@ jobs:
     steps:
       - name: Continue running only if current time is local time
         id: check_timezone
+        env:
+          IGNORE_TIMEZONE: ${{ github.event.inputs.ignoreTimezone || 'false' }}
         run: |
-          if [ ${{ inputs.ignoreTimezone }} == 'true' ] || [ ${{ inputs.ignoreTimezone }} == true ]
-            then
-              echo "should_proceed=true" >> $GITHUB_OUTPUT
-              echo "Ignore timezone"
-              exit 0
+          if [ "$IGNORE_TIMEZONE" = "true" ]
+          then
+            echo "should_proceed=true" >> $GITHUB_OUTPUT
+            echo "Ignore timezone"
+            exit 0
           fi
-          sudo timedatectl set-timezone $TZ
-          sudo timedatectl status
-          hour=$(date +%H)
+          hour=$(TZ=$TZ date +%H)
           echo "hour: $hour, MARKET_OPEN_STOP_LOCAL_HOUR: $MARKET_OPEN_STOP_LOCAL_HOUR, MARKET_CLOSE_STOP_LOCAL_HOUR: $MARKET_CLOSE_STOP_LOCAL_HOUR"
           if [ $hour -ne $MARKET_OPEN_STOP_LOCAL_HOUR ] && [ $hour -ne $MARKET_CLOSE_STOP_LOCAL_HOUR ]
           then
@@ -93,7 +98,7 @@ jobs:
       AWS_REGION: ${{ secrets.AWS_REGION }}
       DOMAIN: ${{ secrets.DOMAIN }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Create AWS config and credentials
         env:
           AWS_ACCESS_KEY: ${{ secrets.AWS_ACCESS_KEY }}
@@ -120,6 +125,9 @@ jobs:
         run: | 
           cd instances
           ./scripts/stop.sh $DOMAIN
+      - name: Cleanup temporary credentials
+        if: ${{ always() }}
+        run: rm -rf ~/.aws
   notify_unsuccesful_run:
     runs-on: ubuntu-latest
     needs: [stop_ec2]
