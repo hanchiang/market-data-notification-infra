@@ -5,12 +5,12 @@ dir=$(dirname $0)
 cd $dir
 
 source ./helper/ec2-helper.sh
-source ./helper/wait_for_dns_propagation.sh
+source ./helper/wait_for_route53_change.sh
 source ./helper/timer.sh
 
-GITHUB_TOKEN=$1
-SSH_USER=$2
-SSH_PRIVATE_KEY_PATH=$3
+GITHUB_TOKEN=${1:-}
+SSH_USER=${2:-}
+SSH_PRIVATE_KEY_PATH=${3:-}
 
 usage () {
     echo "Invalid $1. usage: <path/to/script> <github token> <ssh user> <ssh private key path>"
@@ -42,10 +42,14 @@ wait_for_ec2_stop () {
     instance_state=$(echo $instance_info | jq -r '.state')
     instance_id=$(echo $instance_info | jq -r .'id')
     
-    if [ "$instance_state" = "running" ] || [ "$instance_state" = "terminated" ] || [ "$instance_state" = "shutting-down" ]
+    if [ "$instance_state" = "running" ]
     then
-        echo "Instance cannot be started because it is either running, terminated or going to be terminated"
+        echo "Instance $instance_id is already running. Continuing with reconciliation."
         return 0
+    elif [ "$instance_state" = "terminated" ] || [ "$instance_state" = "shutting-down" ]
+    then
+        echo "Instance $instance_id cannot be started because it is $instance_state"
+        return 1
     elif [ "$instance_state" == "stopped" ] 
     then
         echo "Instance is already stopped"
@@ -72,6 +76,7 @@ wait_for_ec2_stop () {
             time_elapsed=$(get_time_elapsed $start | tail -n 1)
         done
         echo "Instance $instance_id did not stop after $seconds_to_wait seconds"
+        return 1
     fi
     printf "\n"
 }
@@ -118,6 +123,7 @@ start_ec2() {
     done
     echo "Instance $instance_id is not running after $seconds_to_wait seconds"
     printf "\n"
+    return 1
 }
 
 get_latest_successful_ci_sha () {
@@ -151,8 +157,14 @@ start_ec2
 DOMAINS=("api.marketdata.yaphc.com")
 for domain in "${DOMAINS[@]}"
 do
-    ./route53/update-ec2-route53.sh $domain "UPSERT"
-    wait_for_dns_propagation $domain $instance_ip_address
+    change_ids=$(./route53/update-ec2-route53.sh "$domain" "UPSERT")
+    while IFS= read -r change_id
+    do
+        if [ -n "$change_id" ]
+        then
+            wait_for_route53_change "$change_id"
+        fi
+    done <<< "$change_ids"
     printf "\n"
 done
 

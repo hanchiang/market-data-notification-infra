@@ -58,43 +58,10 @@ jobs:
           else
             echo "should_proceed=true" >> $GITHUB_OUTPUT
           fi
-  health_check:
+  start_ec2_and_deploy:
     runs-on: ubuntu-latest
     needs: [check_timezone]
     if: ${{ needs.check_timezone.outputs.should_proceed == 'true' }}
-    outputs:
-      health_check_outcome: ${{ steps.health_check.outputs.outcome }}
-    env:
-      HOST_NAME: ${{ secrets.HOST_NAME }}
-    steps:
-      - name: Check if Market data notification is already running
-        id: health_check
-        run: |
-          health_check=$(curl -fsS $HOST_NAME/healthz || true)
-          if [ -n "$health_check" ]
-          then
-            echo "outcome=success" >> $GITHUB_OUTPUT
-          else
-            echo "outcome=failure" >> $GITHUB_OUTPUT
-          fi
-  notify_already_running:
-    runs-on: ubuntu-latest
-    needs: [health_check]
-    if: ${{ needs.health_check.outputs.health_check_outcome == 'success' }}
-    steps:
-      - name: Send telegram notification Market data notification is already running
-        env:
-          STOCKS_TELEGRAM_DEV_BOT_TOKEN: ${{ secrets.STOCKS_TELEGRAM_DEV_BOT_TOKEN }}
-          STOCKS_TELEGRAM_DEV_ID: ${{ secrets.STOCKS_TELEGRAM_DEV_ID }}
-        run: |
-          now=$(date +%Y-%m-%dT%H:%M:%S)
-          text=$(echo "\[Github action\] Market data notification infra: Market data notification is already running at $now. Workflow: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" | sed 's~[[:blank:]]~%20~g')
-          curl "https://api.telegram.org/bot${STOCKS_TELEGRAM_DEV_BOT_TOKEN}/sendMessage?chat_id=${STOCKS_TELEGRAM_DEV_ID}&text=$text"
-          exit 0
-  start_ec2_and_deploy:
-    runs-on: ubuntu-latest
-    needs: [health_check]
-    if: ${{ needs.health_check.outputs.health_check_outcome == 'failure' }}
     env:
       DOMAIN: ${{ secrets.DOMAIN }}
       SSH_USER: ${{ secrets.SSH_USER }}
