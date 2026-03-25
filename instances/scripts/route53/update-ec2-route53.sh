@@ -1,10 +1,10 @@
 #! /bin/bash
 
-set -e
+set -euo pipefail
 
-DOMAIN=$1
-ACTION=$2
-TTL=$3
+DOMAIN=${1:-}
+ACTION=${2:-}
+TTL=${3:-}
 
 if [ -z "$DOMAIN" ]
 then
@@ -40,7 +40,9 @@ else
     exit 1
 fi
 
-echo "Updating route53 record for instance $instance_id, ip addresses $ip_addresses, action $ACTION, domain $DOMAIN"
+change_ids=()
+
+echo "Updating route53 record for instance $instance_id, ip addresses $ip_addresses, action $ACTION, domain $DOMAIN" >&2
 
 #### Update route53 record set
 for ip in "${ip_addresses[@]}"
@@ -50,8 +52,11 @@ do
 
     cat $record_set_template_file | sed "s~<INSTANCE_IP_ADDRESS>~$ip~" \
     | sed "s~<DOMAIN>~$DOMAIN~" | sed "s~<ACTION>~$ACTION~" | sed "s~<TTL>~$TTL~" > $record_set_file
-    aws route53 change-resource-record-sets --hosted-zone-id Z036374065L40GHHCTH5 --change-batch file://$record_set_file > /dev/null
+    change_id=$(aws route53 change-resource-record-sets --hosted-zone-id Z036374065L40GHHCTH5 --change-batch file://$record_set_file | jq -r '.ChangeInfo.Id')
 
     rm $record_set_file
-    echo "Updated route53 record for ip address $ip, action $ACTION, TTL $TTL"
+    echo "Updated route53 record for ip address $ip, action $ACTION, TTL $TTL, change $change_id" >&2
+    change_ids+=("$change_id")
 done
+
+printf '%s\n' "${change_ids[@]}"
