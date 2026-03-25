@@ -10,7 +10,7 @@ This project is the infrastructure as code management for [Market data notificat
 * [`instances/`](instances): Terraform files to provision EC2 in VPC
     * `main.tf`: Main terraform script
     * `ansible/`: Ansible scripts to run post-provisioning tasks such as mounting EBS volume, set up file system, copy postgres data, setup SSL for nginx 
-    * `scripts/`: Scripts to automate(everything after step 2 of the workflow) start and stop of EC2, DNS, and deployment of [Market data notification](https://github.com/hanchiang/market-data-notification). Calls ansible scripts
+    * `scripts/`: Scripts that automate the post-provisioning flow: EC2 start and stop, DNS updates, and backend deployment.
 
 
 # Workflow
@@ -37,5 +37,5 @@ Run post-provisioning configurations such as setting up DNS, configuring nginx S
 ## 4. Deploy application
 Rerun the latest deploy job in github action
 
-# Workflow
+# Diagram
 ![Workflow](readme-images/infra-workflow.png)
