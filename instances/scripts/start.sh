@@ -185,7 +185,7 @@ printf "\n"
 
 workflow_id=$(echo $deploy_workflow | jq -r .id)
 curl -fsSL -X POST  -H "Accept: application/vnd.github+json" -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/repos/hanchiang/market-data-notification/actions/workflows/$workflow_id/dispatches \
- -d "{\"ref\":\"master\",\"inputs\":{\"image_sha\":\"$deploy_image_sha\"}}"
+ -d "{\"ref\":\"master\",\"inputs\":{\"image_sha\":\"$deploy_image_sha\",\"allow_unverified_image\":\"true\"}}"
 printf "\n"
 
 echo "Script completed in $SECONDS seconds"
