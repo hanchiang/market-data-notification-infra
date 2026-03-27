@@ -13,9 +13,9 @@ on:
   workflow_dispatch:
     inputs:
       logLevel:
-        description: 'Log level'     
+        description: 'Log level'
         required: false
-        default: 'info' 
+        default: 'info'
         type: choice
         options:
         - info
@@ -28,35 +28,71 @@ on:
         default: false
 env:
   TZ: America/New_York
-  # Market open at 9.30am and close at 4pm local time
-  # Run before market open(8.30am - 9.30am) and close(3.45pm - 4.45pm)
-  MARKET_OPEN_STOP_LOCAL_HOUR: 9
-  MARKET_CLOSE_STOP_LOCAL_HOUR: 16
+  # Market open at 9.30am and close at 4pm local time.
+  # Scheduled runs use paired UTC cron entries for DST and can be delayed by up to 30 minutes.
+  MORNING_STOP_WINDOW_START_HHMM: 0915
+  MORNING_STOP_WINDOW_END_HHMM: 0945
+  CLOSE_STOP_WINDOW_START_HHMM: 1635
+  CLOSE_STOP_WINDOW_END_HHMM: 1705
 jobs:
   check_timezone:
     runs-on: ubuntu-latest
     outputs:
       should_proceed: ${{ steps.check_timezone.outputs.should_proceed }}
+      current_local_time: ${{ steps.check_timezone.outputs.current_local_time }}
+      skip_reason: ${{ steps.check_timezone.outputs.skip_reason }}
     steps:
-      - name: Continue running only if current time is local time
+      - name: Continue running only if current time is inside the local stop window
         id: check_timezone
         env:
           IGNORE_TIMEZONE: ${{ github.event.inputs.ignoreTimezone || 'false' }}
         run: |
+          current_local_time=$(TZ=$TZ date +%H%M)
+          current_local_time=$((10#$current_local_time))
+
           if [ "$IGNORE_TIMEZONE" = "true" ]
           then
-            echo "should_proceed=true" >> $GITHUB_OUTPUT
+            echo "should_proceed=true" >> "$GITHUB_OUTPUT"
+            echo "current_local_time=$current_local_time" >> "$GITHUB_OUTPUT"
+            echo "skip_reason=manual override ignoreTimezone=true" >> "$GITHUB_OUTPUT"
             echo "Ignore timezone"
             exit 0
           fi
-          hour=$(TZ=$TZ date +%H)
-          echo "hour: $hour, MARKET_OPEN_STOP_LOCAL_HOUR: $MARKET_OPEN_STOP_LOCAL_HOUR, MARKET_CLOSE_STOP_LOCAL_HOUR: $MARKET_CLOSE_STOP_LOCAL_HOUR"
-          if [ $hour -ne $MARKET_OPEN_STOP_LOCAL_HOUR ] && [ $hour -ne $MARKET_CLOSE_STOP_LOCAL_HOUR ]
+
+          echo "current_local_time: $current_local_time, MORNING_STOP_WINDOW: $MORNING_STOP_WINDOW_START_HHMM-$MORNING_STOP_WINDOW_END_HHMM, CLOSE_STOP_WINDOW: $CLOSE_STOP_WINDOW_START_HHMM-$CLOSE_STOP_WINDOW_END_HHMM"
+
+          if {
+            [ "$current_local_time" -ge $((10#$MORNING_STOP_WINDOW_START_HHMM)) ] &&
+            [ "$current_local_time" -le $((10#$MORNING_STOP_WINDOW_END_HHMM)) ];
+          } || {
+            [ "$current_local_time" -ge $((10#$CLOSE_STOP_WINDOW_START_HHMM)) ] &&
+            [ "$current_local_time" -le $((10#$CLOSE_STOP_WINDOW_END_HHMM)) ];
+          }
           then
-            echo "should_proceed=false" >> $GITHUB_OUTPUT
+            echo "should_proceed=true" >> "$GITHUB_OUTPUT"
+            echo "skip_reason=inside stop window" >> "$GITHUB_OUTPUT"
           else
-            echo "should_proceed=true" >> $GITHUB_OUTPUT
+            echo "should_proceed=false" >> "$GITHUB_OUTPUT"
+            echo "skip_reason=outside local stop windows 09:15-09:45 and 16:35-17:05 America/New_York" >> "$GITHUB_OUTPUT"
           fi
+
+          echo "current_local_time=$current_local_time" >> "$GITHUB_OUTPUT"
+  skip_outside_stop_window:
+    runs-on: ubuntu-latest
+    needs: [check_timezone]
+    if: ${{ needs.check_timezone.outputs.should_proceed != 'true' }}
+    steps:
+      - name: Record skipped stop run
+        run: |
+          echo "Stop workflow intentionally skipped."
+          echo "Local time: ${{ needs.check_timezone.outputs.current_local_time }}"
+          echo "Reason: ${{ needs.check_timezone.outputs.skip_reason }}"
+          {
+            echo "### Stop workflow skipped"
+            echo ""
+            echo "- Local time: \`${{ needs.check_timezone.outputs.current_local_time }}\`"
+            echo "- Reason: ${{ needs.check_timezone.outputs.skip_reason }}"
+          } >> "$GITHUB_STEP_SUMMARY"
   health_check:
     runs-on: ubuntu-latest
     needs: [check_timezone]
@@ -69,12 +105,12 @@ jobs:
       - name: Check if EC2 is already stopped
         id: health_check
         run: |
-          health_check=$(curl $HOST_NAME || true)
+          health_check=$(curl "$HOST_NAME" || true)
           if [ -z "$health_check" ]
           then
-            echo "outcome=failure" >> $GITHUB_OUTPUT
+            echo "outcome=failure" >> "$GITHUB_OUTPUT"
           else
-            echo "outcome=success" >> $GITHUB_OUTPUT
+            echo "outcome=success" >> "$GITHUB_OUTPUT"
           fi
   notify_ec2_already_stopped:
     runs-on: ubuntu-latest
@@ -122,9 +158,9 @@ jobs:
           EOF
           chmod 600 ~/.aws/credentials
       - name: Run stop script
-        run: | 
+        run: |
           cd instances
-          ./scripts/stop.sh $DOMAIN
+          ./scripts/stop.sh "$DOMAIN"
       - name: Cleanup temporary credentials
         if: ${{ always() }}
         run: rm -rf ~/.aws

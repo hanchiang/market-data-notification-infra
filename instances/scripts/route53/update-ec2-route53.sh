@@ -23,6 +23,8 @@ fi
 
 source ./helper/ec2-helper.sh
 
+instance_id=""
+
 if [ "$ACTION" == "UPSERT" ] || [ "$ACTION" == "CREATE" ]
 then
     instance_info=$(get_instance_info)
@@ -34,6 +36,11 @@ elif [ "$ACTION" == "DELETE" ]
 then
     command=$(echo "aws route53 list-resource-record-sets --hosted-zone-id Z036374065L40GHHCTH5 | jq '.ResourceRecordSets[] | select (.Name | contains(\"$DOMAIN\")) | select(.Type == \"A\")'")
     record=$(eval $command)
+    if [ -z "$record" ]
+    then
+        echo "No existing route53 A record found for domain $DOMAIN; nothing to delete" >&2
+        exit 0
+    fi
     ip_addresses=($(echo $record | jq -r '.ResourceRecords[].Value'))
 else
     echo "Unrecognised action $ACTION"
@@ -42,7 +49,12 @@ fi
 
 change_ids=()
 
-echo "Updating route53 record for instance $instance_id, ip addresses $ip_addresses, action $ACTION, domain $DOMAIN" >&2
+if [ -n "$instance_id" ]
+then
+    echo "Updating route53 record for instance $instance_id, ip addresses ${ip_addresses[*]}, action $ACTION, domain $DOMAIN" >&2
+else
+    echo "Updating route53 record for ip addresses ${ip_addresses[*]}, action $ACTION, domain $DOMAIN" >&2
+fi
 
 #### Update route53 record set
 for ip in "${ip_addresses[@]}"

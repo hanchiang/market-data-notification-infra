@@ -17,11 +17,11 @@ then
     DOMAINS=("api.marketdata.yaphc.com")
     for domain in "${DOMAINS[@]}"
     do
-        ./route53/update-ec2-route53.sh $domain "DELETE"
+        ./route53/update-ec2-route53.sh "$domain" "DELETE"
     done
     
     echo "Stopping ec2 $instance_id"
-    aws ec2 stop-instances --instance-ids $instance_id > /dev/null
+    aws ec2 stop-instances --instance-ids "$instance_id" > /dev/null
     printf "\n"
 else
     echo "ec2 $instance_id is not running"
