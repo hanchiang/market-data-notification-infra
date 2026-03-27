@@ -28,40 +28,106 @@ on:
         default: false
 env:
   TZ: America/New_York
-  # Market open at 9.30am and close at 4pm local time
-  # Run before market open(8.30am - 9.30am) and close(3.45pm - 4.45pm)
-  MARKET_OPEN_START_LOCAL_HOUR: 8
-  MARKET_CLOSE_START_LOCAL_HOUR: 15
+  # Market open at 9.30am and close at 4pm local time.
+  # Scheduled runs use paired UTC cron entries for DST and can be delayed by up to 30 minutes.
+  MORNING_START_WINDOW_START_HHMM: 0830
+  MORNING_START_WINDOW_END_HHMM: 0930
+  CLOSE_START_WINDOW_START_HHMM: 1545
+  CLOSE_START_WINDOW_END_HHMM: 1645
 jobs:
   check_timezone:
     runs-on: ubuntu-latest
     outputs:
       should_proceed: ${{ steps.check_timezone.outputs.should_proceed }}
+      current_local_time: ${{ steps.check_timezone.outputs.current_local_time }}
+      skip_reason: ${{ steps.check_timezone.outputs.skip_reason }}
     steps:
-      - name: Continue running only if current time is local time
+      - name: Continue running only if current time is inside the local start window
         id: check_timezone
         env:
           IGNORE_TIMEZONE: ${{ github.event.inputs.ignoreTimezone || 'false' }}
         run: |
-          # Use TZ for date calculation only; do not mutate the runner timezone.
+          current_local_time=$(TZ=$TZ date +%H%M)
+          current_local_time=$((10#$current_local_time))
+
           if [ "$IGNORE_TIMEZONE" = "true" ]
           then
-            echo "should_proceed=true" >> $GITHUB_OUTPUT
+            echo "should_proceed=true" >> "$GITHUB_OUTPUT"
+            echo "current_local_time=$current_local_time" >> "$GITHUB_OUTPUT"
+            echo "skip_reason=manual override ignoreTimezone=true" >> "$GITHUB_OUTPUT"
             echo "Ignore timezone"
             exit 0
           fi
-          hour=$(TZ=$TZ date +%H)
-          echo "hour: $hour, MARKET_OPEN_START_LOCAL_HOUR: $MARKET_OPEN_START_LOCAL_HOUR, MARKET_CLOSE_START_LOCAL_HOUR: $MARKET_CLOSE_START_LOCAL_HOUR"
-          if [ $hour -ne $MARKET_OPEN_START_LOCAL_HOUR ] && [ $hour -ne $MARKET_CLOSE_START_LOCAL_HOUR ]
+
+          echo "current_local_time: $current_local_time, MORNING_START_WINDOW: $MORNING_START_WINDOW_START_HHMM-$MORNING_START_WINDOW_END_HHMM, CLOSE_START_WINDOW: $CLOSE_START_WINDOW_START_HHMM-$CLOSE_START_WINDOW_END_HHMM"
+
+          if {
+            [ "$current_local_time" -ge $((10#$MORNING_START_WINDOW_START_HHMM)) ] &&
+            [ "$current_local_time" -le $((10#$MORNING_START_WINDOW_END_HHMM)) ];
+          } || {
+            [ "$current_local_time" -ge $((10#$CLOSE_START_WINDOW_START_HHMM)) ] &&
+            [ "$current_local_time" -le $((10#$CLOSE_START_WINDOW_END_HHMM)) ];
+          }
           then
-            echo "should_proceed=false" >> $GITHUB_OUTPUT
+            echo "should_proceed=true" >> "$GITHUB_OUTPUT"
+            echo "skip_reason=inside start window" >> "$GITHUB_OUTPUT"
           else
-            echo "should_proceed=true" >> $GITHUB_OUTPUT
+            echo "should_proceed=false" >> "$GITHUB_OUTPUT"
+            echo "skip_reason=outside local start windows 08:30-09:30 and 15:45-16:45 America/New_York" >> "$GITHUB_OUTPUT"
           fi
-  start_ec2_and_deploy:
+          echo "current_local_time=$current_local_time" >> "$GITHUB_OUTPUT"
+  skip_outside_start_window:
+    runs-on: ubuntu-latest
+    needs: [check_timezone]
+    if: ${{ needs.check_timezone.outputs.should_proceed != 'true' }}
+    steps:
+      - name: Record skipped start run
+        run: |
+          echo "Start workflow intentionally skipped."
+          echo "Local time: ${{ needs.check_timezone.outputs.current_local_time }}"
+          echo "Reason: ${{ needs.check_timezone.outputs.skip_reason }}"
+          {
+            echo "### Start workflow skipped"
+            echo ""
+            echo "- Local time: \`${{ needs.check_timezone.outputs.current_local_time }}\`"
+            echo "- Reason: ${{ needs.check_timezone.outputs.skip_reason }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+  health_check:
     runs-on: ubuntu-latest
     needs: [check_timezone]
     if: ${{ needs.check_timezone.outputs.should_proceed == 'true' }}
+    outputs:
+      service_healthy: ${{ steps.health_check.outputs.service_healthy }}
+    env:
+      HOST_NAME: ${{ secrets.HOST_NAME }}
+    steps:
+      - name: Check if backend is already healthy
+        id: health_check
+        run: |
+          if curl -fsS "$HOST_NAME/healthz" > /dev/null
+          then
+            echo "service_healthy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "service_healthy=false" >> "$GITHUB_OUTPUT"
+          fi
+  skip_already_healthy:
+    runs-on: ubuntu-latest
+    needs: [check_timezone, health_check]
+    if: ${{ needs.check_timezone.outputs.should_proceed == 'true' && needs.health_check.outputs.service_healthy == 'true' }}
+    steps:
+      - name: Record skipped deploy because service is already healthy
+        run: |
+          echo "Start workflow skipped deploy because the backend is already healthy."
+          {
+            echo "### Start deploy skipped"
+            echo ""
+            echo "- Local time: \`${{ needs.check_timezone.outputs.current_local_time }}\`"
+            echo "- Reason: backend already healthy"
+          } >> "$GITHUB_STEP_SUMMARY"
+  start_ec2_and_deploy:
+    runs-on: ubuntu-latest
+    needs: [check_timezone, health_check]
+    if: ${{ needs.check_timezone.outputs.should_proceed == 'true' && needs.health_check.outputs.service_healthy != 'true' }}
     env:
       DOMAIN: ${{ secrets.DOMAIN }}
       SSH_USER: ${{ secrets.SSH_USER }}
