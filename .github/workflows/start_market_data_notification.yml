@@ -6,7 +6,7 @@ permissions:
   contents: read
 on:
   schedule:
-    # run time is usually delayed by up to 30mins
+    # run time can be delayed by up to 30mins
     # 0 = sunday, 6 = saturday
     - cron: '05 12,13 * * 0-6' # weekdays
     - cron: '05 19,20 * * 0-6' # weekdays
