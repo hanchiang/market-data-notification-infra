@@ -31,8 +31,8 @@ env:
   # Market open at 9.30am and close at 4pm local time.
   # Scheduled runs use paired UTC cron entries for DST; gate by local hour
   # so delayed runs still proceed while the DST counterpart hour is skipped.
-  MORNING_STOP_LOCAL_HOUR: 9
-  CLOSE_STOP_LOCAL_HOUR: 16
+  AFTER_MARKET_OPEN_STOP_LOCAL_HOUR: 9
+  AFTER_MARKET_CLOSE_STOP_LOCAL_HOUR: 16
 jobs:
   check_timezone:
     runs-on: ubuntu-latest
@@ -60,9 +60,9 @@ jobs:
             exit 0
           fi
 
-          echo "current_local_time: $current_local_time, current_local_hour: $current_local_hour, MORNING_STOP_LOCAL_HOUR: $MORNING_STOP_LOCAL_HOUR, CLOSE_STOP_LOCAL_HOUR: $CLOSE_STOP_LOCAL_HOUR"
+          echo "current_local_time: $current_local_time, current_local_hour: $current_local_hour, AFTER_MARKET_OPEN_STOP_LOCAL_HOUR: $AFTER_MARKET_OPEN_STOP_LOCAL_HOUR, AFTER_MARKET_CLOSE_STOP_LOCAL_HOUR: $AFTER_MARKET_CLOSE_STOP_LOCAL_HOUR"
 
-          if [ "$current_local_hour" -eq "$MORNING_STOP_LOCAL_HOUR" ] || [ "$current_local_hour" -eq "$CLOSE_STOP_LOCAL_HOUR" ]
+          if [ "$current_local_hour" -eq "$AFTER_MARKET_OPEN_STOP_LOCAL_HOUR" ] || [ "$current_local_hour" -eq "$AFTER_MARKET_CLOSE_STOP_LOCAL_HOUR" ]
           then
             echo "should_proceed=true" >> "$GITHUB_OUTPUT"
             echo "skip_reason=inside stop hour" >> "$GITHUB_OUTPUT"
