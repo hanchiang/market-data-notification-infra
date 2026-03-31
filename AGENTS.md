@@ -1,10 +1,11 @@
 # market-data-notification-infra Agent Guide
 
-Last verified: 2026-03-22
+Last verified: 2026-04-01
 
 ## Scope
 - Applies to `market-data-notification-infra/` unless a deeper `AGENTS.md` overrides it.
 - Follow the workspace root `AGENTS.md` first for cross-repo rules.
+- Use workspace-root task memory for canonical active work. Any repo-local `ACTIVE_TASK.md` or `ACTIVE_TASKS/` paths are scratch only unless the human explicitly asks for them.
 
 ## Repo Role
 - Infrastructure and automation repo for the notification backend on AWS.
@@ -26,10 +27,7 @@ Last verified: 2026-03-22
 - Preserve idempotency when editing shell scripts, Ansible, Packer, or Terraform.
 
 ## Validation
-- Packer formatting: `packer fmt -check images/image.pkr.hcl`
-- Terraform formatting: `terraform fmt -check instances`
-- Terraform validation: run from `instances/` with initialized providers, `terraform validate`
-- Shell scripts: `shellcheck` for touched scripts when available
+- Use workspace `EVALS.md` as the default validation matrix for this repo.
 - If a validation step cannot run because cloud credentials or provider initialization are missing, state that explicitly.
 
 ## Stop And Ask
