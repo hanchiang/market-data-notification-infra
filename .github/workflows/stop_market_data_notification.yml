@@ -6,10 +6,10 @@ permissions:
   contents: read
 on:
   schedule:
-    # run time is usually delayed by up to 30mins
+    # run time can be delayed by up to 30mins
     # 0 = sunday, 6 = saturday
-    - cron: '15 13,14 * * 0-6' # weekdays
-    - cron: '35 20,21 * * 0-6' # weekdays
+    - cron: '15 13,14 * * 0-6' # every day
+    - cron: '35 20,21 * * 0-6' # every day
   workflow_dispatch:
     inputs:
       logLevel:
@@ -29,11 +29,10 @@ on:
 env:
   TZ: America/New_York
   # Market open at 9.30am and close at 4pm local time.
-  # Scheduled runs use paired UTC cron entries for DST and can be delayed by up to 30 minutes.
-  MORNING_STOP_WINDOW_START_HHMM: 0915
-  MORNING_STOP_WINDOW_END_HHMM: 0945
-  CLOSE_STOP_WINDOW_START_HHMM: 1635
-  CLOSE_STOP_WINDOW_END_HHMM: 1705
+  # Scheduled runs use paired UTC cron entries for DST; gate by local hour
+  # so delayed runs still proceed while the DST counterpart hour is skipped.
+  AFTER_MARKET_OPEN_STOP_LOCAL_HOUR: 9
+  AFTER_MARKET_CLOSE_STOP_LOCAL_HOUR: 16
 jobs:
   check_timezone:
     runs-on: ubuntu-latest
@@ -49,6 +48,8 @@ jobs:
         run: |
           current_local_time=$(TZ=$TZ date +%H%M)
           current_local_time=$((10#$current_local_time))
+          current_local_hour=$(TZ=$TZ date +%H)
+          current_local_hour=$((10#$current_local_hour))
 
           if [ "$IGNORE_TIMEZONE" = "true" ]
           then
@@ -59,21 +60,15 @@ jobs:
             exit 0
           fi
 
-          echo "current_local_time: $current_local_time, MORNING_STOP_WINDOW: $MORNING_STOP_WINDOW_START_HHMM-$MORNING_STOP_WINDOW_END_HHMM, CLOSE_STOP_WINDOW: $CLOSE_STOP_WINDOW_START_HHMM-$CLOSE_STOP_WINDOW_END_HHMM"
+          echo "current_local_time: $current_local_time, current_local_hour: $current_local_hour, AFTER_MARKET_OPEN_STOP_LOCAL_HOUR: $AFTER_MARKET_OPEN_STOP_LOCAL_HOUR, AFTER_MARKET_CLOSE_STOP_LOCAL_HOUR: $AFTER_MARKET_CLOSE_STOP_LOCAL_HOUR"
 
-          if {
-            [ "$current_local_time" -ge $((10#$MORNING_STOP_WINDOW_START_HHMM)) ] &&
-            [ "$current_local_time" -le $((10#$MORNING_STOP_WINDOW_END_HHMM)) ];
-          } || {
-            [ "$current_local_time" -ge $((10#$CLOSE_STOP_WINDOW_START_HHMM)) ] &&
-            [ "$current_local_time" -le $((10#$CLOSE_STOP_WINDOW_END_HHMM)) ];
-          }
+          if [ "$current_local_hour" -eq "$AFTER_MARKET_OPEN_STOP_LOCAL_HOUR" ] || [ "$current_local_hour" -eq "$AFTER_MARKET_CLOSE_STOP_LOCAL_HOUR" ]
           then
             echo "should_proceed=true" >> "$GITHUB_OUTPUT"
-            echo "skip_reason=inside stop window" >> "$GITHUB_OUTPUT"
+            echo "skip_reason=inside stop hour" >> "$GITHUB_OUTPUT"
           else
             echo "should_proceed=false" >> "$GITHUB_OUTPUT"
-            echo "skip_reason=outside local stop windows 09:15-09:45 and 16:35-17:05 America/New_York" >> "$GITHUB_OUTPUT"
+            echo "skip_reason=outside local stop hours 09 and 16 America/New_York" >> "$GITHUB_OUTPUT"
           fi
 
           echo "current_local_time=$current_local_time" >> "$GITHUB_OUTPUT"
