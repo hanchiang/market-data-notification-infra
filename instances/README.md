@@ -1,8 +1,152 @@
-# Provision infra
-`terraform apply`
+# Instance Operations
 
-# Start instance
-`scripts/start.sh <github token> <ssh user> <path to ssh private key>`
+## Scope
+- Run Terraform from `instances/`.
+- Treat `instances/scripts/start.sh` and `instances/scripts/stop.sh` as the normal operator entry points for runtime bring-up and shutdown.
+- Treat `instances/ansible/` as implementation detail unless you are debugging or making infra changes.
 
-# Stop instance
-`scripts/stop.sh`
+## Prerequisites
+- Terraform Cloud access for workspace `hansolo/market_data_notification`
+- AWS credentials with permission to read and modify the Terraform-managed resources
+- `terraform`
+- `aws`
+- `jq`
+- `curl`
+- `ansible-playbook` for local reconciliation or debugging
+- SSH access to the target instance
+
+## Terraform Backend And State
+- `instances/main.tf` uses the Terraform Cloud backend for the `hansolo` organization and the `market_data_notification` workspace.
+- The authoritative Terraform state lives in Terraform Cloud, not in a local `terraform.tfstate` file.
+- Not having a local state file on this machine is normal.
+- Do not run `terraform apply` from a directory initialized with `-backend=false`, because that bypasses the remote backend and can produce a misleading local plan.
+
+### Safe State-Sync Checklist
+1. Authenticate to Terraform Cloud if this machine has not been used for that workspace before:
+
+   ```bash
+   cd instances
+   terraform login
+   ```
+
+2. Initialize the working directory against the configured remote backend:
+
+   ```bash
+   terraform init
+   ```
+
+3. Confirm Terraform can read the remote workspace state before planning:
+
+   ```bash
+   terraform state pull >/tmp/market_data_notification.tfstate
+   ```
+
+4. Review that pulled state file only for confirmation:
+   - it should contain existing managed resources
+   - if it is empty or the command fails, stop before planning or applying
+
+5. Run a read-only plan:
+
+   ```bash
+   terraform plan
+   ```
+
+6. Stop if the plan implies Terraform thinks the existing infrastructure is absent or wants broad destructive changes.
+
+### Drift Inspection And State Sync
+- When you suspect manual AWS drift, inspect it first with:
+
+  ```bash
+  terraform plan -refresh-only
+  ```
+
+- If that output only reflects real remote drift that Terraform state should accept, apply the refresh-only change with:
+
+  ```bash
+  terraform apply -refresh-only
+  ```
+
+- `terraform apply -refresh-only` updates Terraform state to match the real remote objects. It does not modify AWS resources to match the current `.tf` configuration.
+- After any refresh-only apply, immediately run a normal plan again:
+
+  ```bash
+  terraform plan
+  ```
+
+- Do not use refresh-only apply to hide configuration drift you actually intend Terraform to enforce. In particular, immutable EC2 launch attributes can still require replacement in the follow-up normal plan.
+
+### Important Notes
+- `terraform init` does not destroy infrastructure.
+- The real risk is applying from the wrong backend context, not the absence of a local state file.
+- If `terraform state pull` shows the current remote state, Terraform is not treating the cloud as empty.
+- Follow `terraform plan -refresh-only` with a normal `terraform plan` when you suspect manual AWS drift.
+
+## Provision Infra
+- Apply only after reviewing a non-destructive plan:
+
+  ```bash
+  terraform apply
+  ```
+
+## Start Instance
+```bash
+scripts/start.sh <github token> <ssh user> <path to ssh private key>
+```
+
+- `start.sh` is the normal runtime bring-up path.
+- It starts or reuses the EC2 instance, updates Route53, runs Ansible reconciliation, and dispatches backend deployment from the latest successful backend CI SHA on `master`.
+
+## Stop Instance
+```bash
+scripts/stop.sh
+```
+
+- `stop.sh` removes the Route53 record and stops the instance.
+
+## Ansible Reconciliation
+- The normal operator flow reaches Ansible through `scripts/start.sh`, which calls `../ansible/start.sh`.
+- `ansible/start.sh` currently runs:
+  - `playbooks/nginx-https.yml`
+  - `playbooks/letsencrypt-backup.yml` on the feature branch when the backup recipient is configured
+- Treat direct playbook execution as a debugging or change-validation path, not the default operator workflow.
+
+## Let's Encrypt Backup Rollout Checklist
+1. Review `main.tf` and confirm the intended live delta is limited to:
+   - one S3 backup bucket
+   - bucket versioning, server-side encryption, lifecycle retention, and public-access block
+   - one IAM role and instance profile
+   - attachment of the instance profile to the EC2 instance
+2. Confirm the GitHub Actions secret `LETSENCRYPT_BACKUP_AGE_RECIPIENT` is set to the correct operator public key.
+3. Keep the existing AMI-time Let's Encrypt copy path in place for the first rollout.
+4. Run a read-only `terraform plan` against the real remote workspace.
+5. Stop if the plan shows instance replacement, bucket destruction or rename, or unrelated drift.
+6. Apply in a low-risk window where a short startup issue is acceptable.
+7. Trigger one controlled start flow.
+8. Verify TLS still succeeds before treating backup validation as meaningful.
+9. Confirm the host now has:
+   - `/etc/market-data-notification/letsencrypt-backup.env`
+   - `/usr/local/sbin/letsencrypt_backup_to_s3.sh`
+10. From a trusted operator machine, verify a fresh object exists in:
+
+    ```bash
+    aws s3 ls "s3://market-data-notification-le-backup-<account-id>-<region>/letsencrypt/<hostname>/"
+    ```
+
+11. Download one encrypted archive, decrypt it with the operator private key, and inspect the tar members for:
+    - `accounts/`
+    - `live/<domain>/`
+    - `archive/<domain>/`
+    - `renewal/<domain>.conf`
+12. On the host, run one manual backup:
+
+    ```bash
+    sudo /usr/local/sbin/letsencrypt_backup_to_s3.sh
+    ```
+
+13. Confirm the manual run uploads successfully and prints the S3 object path.
+14. Rehearse restore on a non-production target if possible:
+    - restore the decrypted Let's Encrypt state onto the target host
+    - rerun TLS reconciliation
+    - confirm nginx starts with the restored cert material
+15. Treat forced renewal as troubleshooting guidance, not the primary restore-validation step.
+16. Only after a successful restore rehearsal, decide whether to retire the older Packer-time Let's Encrypt copy path.

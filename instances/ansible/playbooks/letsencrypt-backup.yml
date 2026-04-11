@@ -1,0 +1,76 @@
+- hosts: market_data_notification
+  name: Install Let's Encrypt backup flow
+  remote_user: "{{ USER }}"
+  gather_facts: no
+  vars_files:
+    - ../vars.yml
+  vars:
+    letsencrypt_backup_enabled: "{{ LETSENCRYPT_BACKUP_AGE_RECIPIENT | default('') | length > 0 }}"
+  tasks:
+    - name: Skip Let's Encrypt backup installation when no recipient is configured
+      debug:
+        msg: "Skipping Let's Encrypt backup install because LETSENCRYPT_BACKUP_AGE_RECIPIENT is not configured."
+      when: not letsencrypt_backup_enabled
+
+    - name: Install packages for Let's Encrypt backup
+      become: yes
+      apt:
+        name:
+          - age
+          - awscli
+        state: present
+        update_cache: yes
+      when: letsencrypt_backup_enabled
+
+    - name: Ensure backup config directory exists
+      become: yes
+      file:
+        path: /etc/market-data-notification
+        state: directory
+        owner: root
+        group: root
+        mode: "0750"
+      when: letsencrypt_backup_enabled
+
+    - name: Install Let's Encrypt backup env file
+      become: yes
+      copy:
+        dest: /etc/market-data-notification/letsencrypt-backup.env
+        owner: root
+        group: root
+        mode: "0600"
+        content: |
+          LETSENCRYPT_BACKUP_AGE_RECIPIENT={{ LETSENCRYPT_BACKUP_AGE_RECIPIENT }}
+          LETSENCRYPT_BACKUP_DOMAINS="{{ DOMAINS | join(' ') }}"
+      when: letsencrypt_backup_enabled
+
+    - name: Install Let's Encrypt backup script
+      become: yes
+      copy:
+        src: ../files/letsencrypt_backup_to_s3.sh
+        dest: /usr/local/sbin/letsencrypt_backup_to_s3.sh
+        owner: root
+        group: root
+        mode: "0700"
+      when: letsencrypt_backup_enabled
+
+    - name: Upload encrypted Let's Encrypt backup to S3
+      args:
+        executable: /bin/bash
+      become: yes
+      register: letsencrypt_backup
+      failed_when: false
+      shell: |
+        /usr/local/sbin/letsencrypt_backup_to_s3.sh
+      when: letsencrypt_backup_enabled
+
+    - debug: var=letsencrypt_backup.stdout_lines
+      when: letsencrypt_backup_enabled
+    - debug: var=letsencrypt_backup.stderr_lines
+      when: letsencrypt_backup_enabled
+    - name: Warn when Let's Encrypt backup upload fails
+      debug:
+        msg: "Let's Encrypt backup upload failed with rc={{ letsencrypt_backup.rc }}"
+      when:
+        - letsencrypt_backup_enabled
+        - letsencrypt_backup.rc != 0

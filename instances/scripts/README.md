@@ -1,14 +1,29 @@
-# Introduction
-The scripts folder contains scripts to automate starting and stopping of AWS EC2, DNS, and deployment of [Market data notification](https://github.com/hanchiang/market-data-notification)
-Scripts should be run at this directory.
+# Script Overview
 
-`start.sh`
-* Start EC2
-* Update route53 record, wait for DNS record to be updated
-* Ansible:
-  * Configure SSL for nginx
-* Re-run github action deployment job for URL shortener
+The `scripts/` directory automates EC2 runtime bring-up, shutdown, Route53 updates, and backend deployment handoff for [Market data notification](https://github.com/hanchiang/market-data-notification).
 
-`stop.sh`
-* Remove route53 record
-* Stop EC2
+Run these scripts from `instances/scripts/`.
+
+## `start.sh`
+- Starts the EC2 instance if needed
+- Waits for the instance to be running
+- Updates the Route53 record for the service domain
+- Calls `../ansible/start.sh` to reconcile host configuration
+  - nginx and certbot TLS setup
+  - feature-branch Let's Encrypt backup reconciliation after TLS setup
+- Resolves the latest successful backend CI build on `master`
+- Dispatches the backend deploy workflow using that image SHA
+
+Inputs:
+
+```bash
+./start.sh <github token> <ssh user> <path to ssh private key>
+```
+
+## `stop.sh`
+- Removes the Route53 record
+- Stops the EC2 instance
+
+```bash
+./stop.sh
+```
