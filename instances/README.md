@@ -116,10 +116,11 @@ scripts/stop.sh
    - bucket versioning, server-side encryption, lifecycle retention, and public-access block
    - one IAM role and instance profile
    - attachment of the instance profile to the EC2 instance
+   - one public-subnet update to enable automatic public IPv4 assignment on launch, replacing the previous instance-level public-IP setting
 2. Confirm the GitHub Actions secret `LETSENCRYPT_BACKUP_AGE_RECIPIENT` is set to the correct operator public key.
 3. Keep the existing AMI-time Let's Encrypt copy path in place for the first rollout.
 4. Run a read-only `terraform plan` against the real remote workspace.
-5. Stop if the plan shows instance replacement, bucket destruction or rename, or unrelated drift.
+5. Stop if the plan shows instance replacement, bucket destruction or rename, or drift beyond the listed instance-profile and public-subnet changes.
 6. Apply in a low-risk window where a short startup issue is acceptable.
 7. Trigger one controlled start flow.
 8. Verify TLS still succeeds before treating backup validation as meaningful.

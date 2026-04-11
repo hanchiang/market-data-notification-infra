@@ -191,7 +191,7 @@ jobs:
           DOMAINS:
             - $DOMAIN
           ADMIN_EMAIL: $ADMIN_EMAIL
-          LETSENCRYPT_BACKUP_AGE_RECIPIENT: $LETSENCRYPT_BACKUP_AGE_RECIPIENT
+          LETSENCRYPT_BACKUP_AGE_RECIPIENT: "$LETSENCRYPT_BACKUP_AGE_RECIPIENT"
           EOF
       - name: Create AWS config and credentials
         env:
