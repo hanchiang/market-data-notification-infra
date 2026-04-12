@@ -148,11 +148,11 @@ resource "aws_s3_bucket_lifecycle_configuration" "letsencrypt_backup" {
     status = "Enabled"
 
     expiration {
-      days = 60
+      days = 180
     }
 
     noncurrent_version_expiration {
-      noncurrent_days = 30
+      noncurrent_days = 14
     }
   }
 }
