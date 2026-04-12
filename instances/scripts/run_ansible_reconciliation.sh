@@ -91,11 +91,8 @@ plugin: amazon.aws.aws_ec2
 hostvars_prefix: aws_
 regions:
   - $AWS_REGION
-keyed_groups:
-  - key: aws_ec2_tags
-    prefix: tag
-  - key: aws_ec2_tags.Name
-    separator: ''
+groups:
+  market_data_notification: ec2_tags.Name == '$INSTANCE_TAG_NAME'
 include_filters:
   - tag:Name:
       - $INSTANCE_TAG_NAME
