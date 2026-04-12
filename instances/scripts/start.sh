@@ -257,7 +257,7 @@ wait_for_ec2_stop
 start_ec2
 
 # Update route53 record
-DOMAINS=("api.marketdata.yaphc.com")
+DOMAINS=("$DOMAIN")
 for domain in "${DOMAINS[@]}"
 do
     change_ids=$(./route53/update-ec2-route53.sh "$domain" "UPSERT")

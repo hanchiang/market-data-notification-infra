@@ -47,6 +47,7 @@ cd instances/scripts
 ## `stop.sh`
 - Removes the Route53 record
 - Stops the EC2 instance
+- Uses the same `start.local.env` convenience file as `start.sh` for `DOMAIN` and `ROUTE53_HOSTED_ZONE_ID`
 
 ```bash
 ./stop.sh

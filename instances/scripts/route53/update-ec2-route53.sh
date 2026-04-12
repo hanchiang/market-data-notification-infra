@@ -128,8 +128,8 @@ fi
 #### Update route53 record set
 for ip in "${ip_addresses[@]}"
 do
-    record_set_file="route53/change-record-set.json"
-    record_set_template_file="route53/change-record-set.json.tpl"
+    record_set_file="$SCRIPT_DIR/change-record-set.json"
+    record_set_template_file="$SCRIPT_DIR/change-record-set.json.tpl"
 
     sed "s~<INSTANCE_IP_ADDRESS>~$ip~" "$record_set_template_file" \
     | sed "s~<DOMAIN>~$DOMAIN~" | sed "s~<ACTION>~$ACTION~" | sed "s~<TTL>~$TTL~" > "$record_set_file"
