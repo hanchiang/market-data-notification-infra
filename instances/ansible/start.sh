@@ -23,14 +23,14 @@ then
     usage
 fi
 
-# Configure ssl for nginx
-ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -u "$SSH_USER" -i aws_ec2.yml --private-key "$SSH_PRIVATE_KEY_PATH" playbooks/nginx-https.yml
-
-# Install and run the encrypted Let's Encrypt backup flow after TLS reconciliation.
-# Backup reconciliation is intentionally non-blocking so a backup-path problem
-# does not prevent the runtime from starting.
+# Install the encrypted Let's Encrypt backup prerequisites before TLS reconciliation.
+# Backup setup is intentionally non-blocking so a backup-path problem does not
+# prevent the runtime from starting. Successful cert issuance or renewal then
+# triggers the actual upload via certbot deploy hooks.
 if ! ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -u "$SSH_USER" -i aws_ec2.yml --private-key "$SSH_PRIVATE_KEY_PATH" playbooks/letsencrypt-backup.yml
 then
-    echo "Warning: Let's Encrypt backup reconciliation failed; continuing startup" >&2
+    echo "Warning: Let's Encrypt backup hook setup failed; continuing startup" >&2
 fi
 
+# Configure ssl for nginx
+ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -u "$SSH_USER" -i aws_ec2.yml --private-key "$SSH_PRIVATE_KEY_PATH" playbooks/nginx-https.yml

@@ -6,7 +6,19 @@
     - ../vars.yml
   vars:
     letsencrypt_backup_enabled: "{{ (LETSENCRYPT_BACKUP_AGE_PUBLIC_KEY | default('', true) | string | trim | length) > 0 }}"
+    letsencrypt_backup_deploy_hook_path: /etc/letsencrypt/renewal-hooks/deploy/50-market-data-notification-letsencrypt-backup.sh
   tasks:
+    - name: Remove Let's Encrypt backup hook artifacts when no public key is configured
+      become: yes
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ letsencrypt_backup_deploy_hook_path }}"
+        - /etc/market-data-notification/letsencrypt-backup.env
+        - /usr/local/sbin/letsencrypt_backup_to_s3.sh
+      when: not letsencrypt_backup_enabled
+
     - name: Skip Let's Encrypt backup installation when no public key is configured
       debug:
         msg: "Skipping Let's Encrypt backup install because LETSENCRYPT_BACKUP_AGE_PUBLIC_KEY is not configured."
@@ -54,23 +66,25 @@
         mode: "0700"
       when: letsencrypt_backup_enabled
 
-    - name: Upload encrypted Let's Encrypt backup to S3
-      args:
-        executable: /bin/bash
+    - name: Ensure certbot deploy-hook directory exists
       become: yes
-      register: letsencrypt_backup
-      failed_when: false
-      shell: |
-        /usr/local/sbin/letsencrypt_backup_to_s3.sh
+      file:
+        path: /etc/letsencrypt/renewal-hooks/deploy
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
       when: letsencrypt_backup_enabled
 
-    - debug: var=letsencrypt_backup.stdout_lines
+    - name: Install Let's Encrypt backup deploy hook
+      become: yes
+      copy:
+        dest: "{{ letsencrypt_backup_deploy_hook_path }}"
+        owner: root
+        group: root
+        mode: "0755"
+        content: |
+          #!/bin/bash
+          set -euo pipefail
+          /usr/local/sbin/letsencrypt_backup_to_s3.sh
       when: letsencrypt_backup_enabled
-    - debug: var=letsencrypt_backup.stderr_lines
-      when: letsencrypt_backup_enabled
-    - name: Warn when Let's Encrypt backup upload fails
-      debug:
-        msg: "Let's Encrypt backup upload failed with rc={{ letsencrypt_backup.rc }}"
-      when:
-        - letsencrypt_backup_enabled
-        - letsencrypt_backup.rc != 0

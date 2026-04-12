@@ -106,8 +106,10 @@ scripts/stop.sh
 ## Ansible Reconciliation
 - The normal operator flow reaches Ansible through `scripts/start.sh`, which calls `../ansible/start.sh`.
 - `ansible/start.sh` currently runs:
+  - `playbooks/letsencrypt-backup.yml` on the feature branch when the backup public key is configured
   - `playbooks/nginx-https.yml`
-  - `playbooks/letsencrypt-backup.yml` on the feature branch when the backup recipient is configured
+- The backup playbook installs the encrypt-and-upload script, env file, and certbot deploy hook.
+- The actual backup upload is triggered by successful certificate issuance or renewal, not by every start run.
 - Treat direct playbook execution as a debugging or change-validation path, not the default operator workflow.
 
 ## Let's Encrypt Backup Rollout Checklist
@@ -127,24 +129,25 @@ scripts/stop.sh
 9. Confirm the host now has:
    - `/etc/market-data-notification/letsencrypt-backup.env`
    - `/usr/local/sbin/letsencrypt_backup_to_s3.sh`
-10. From a trusted operator machine, verify a fresh object exists in:
-
-    ```bash
-    aws s3 ls "s3://market-data-notification-le-backup-<account-id>-<region>/letsencrypt/<hostname>/"
-    ```
-
-11. Download one encrypted archive, decrypt it with the operator private key, and inspect the tar members for:
-    - `accounts/`
-    - `live/<domain>/`
-    - `archive/<domain>/`
-    - `renewal/<domain>.conf`
-12. On the host, run one manual backup:
+   - `/etc/letsencrypt/renewal-hooks/deploy/50-market-data-notification-letsencrypt-backup.sh`
+10. If this rollout reused an already-valid certificate and did not issue or renew one during startup, seed the first backup manually on the host:
 
     ```bash
     sudo /usr/local/sbin/letsencrypt_backup_to_s3.sh
     ```
 
-13. Confirm the manual run uploads successfully and prints the S3 object path.
+11. From a trusted operator machine, verify a fresh object exists in:
+
+    ```bash
+    aws s3 ls "s3://market-data-notification-le-backup-<account-id>-<region>/letsencrypt/<hostname>/"
+    ```
+
+12. Download one encrypted archive, decrypt it with the operator private key, and inspect the tar members for:
+    - `accounts/`
+    - `live/<domain>/`
+    - `archive/<domain>/`
+    - `renewal/<domain>.conf`
+13. Confirm the seed or hook-triggered upload succeeds and prints or results in the expected S3 object path.
 14. Rehearse restore on a non-production target if possible:
     - restore the decrypted Let's Encrypt state onto the target host
     - rerun TLS reconciliation

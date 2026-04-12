@@ -61,8 +61,8 @@ This project is the infrastructure as code management for [Market data notificat
 - Ansible is not a standalone day-to-day operator entry point in this repo.
 - The normal operator path runs Ansible through `instances/scripts/start.sh` and `instances/ansible/start.sh`.
 - The current Ansible reconciliation covers:
-  - nginx and certbot TLS setup
-  - the feature-branch Let's Encrypt encrypted backup flow after TLS reconciliation
+  - feature-branch Let's Encrypt backup hook setup before TLS reconciliation
+  - nginx and certbot TLS setup, with encrypted backup upload triggered on successful certificate issuance or renewal
 
 ## 5. Validate live changes carefully
 - For the current Let's Encrypt backup work, use the canonical rollout and restore checklist in [`instances/README.md`](instances/README.md).

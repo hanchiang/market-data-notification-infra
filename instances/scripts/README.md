@@ -9,8 +9,8 @@ Run these scripts from `instances/scripts/`.
 - Waits for the instance to be running
 - Updates the Route53 record for the service domain
 - Calls `../ansible/start.sh` to reconcile host configuration
-  - nginx and certbot TLS setup
-  - feature-branch Let's Encrypt backup reconciliation after TLS setup
+  - feature-branch Let's Encrypt backup hook setup before TLS reconciliation
+  - nginx and certbot TLS setup, with encrypted backup upload triggered on successful certificate issuance or renewal
 - Resolves the latest successful backend CI build on `master`
 - Dispatches the backend deploy workflow using that image SHA
 
