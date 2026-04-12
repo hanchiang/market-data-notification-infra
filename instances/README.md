@@ -13,6 +13,7 @@
 - `jq`
 - `curl`
 - `ansible-playbook` for local reconciliation or debugging
+- the `amazon.aws` Ansible collection for the `aws_ec2` dynamic inventory plugin
 - SSH access to the target instance
 
 ## Terraform Backend And State
@@ -85,16 +86,40 @@
 - Apply only after reviewing a non-destructive plan:
 
   ```bash
+  cp terraform.tfvars.example terraform.tfvars
+  ```
+
+- Fill in the local values required by `variables.tf` in `terraform.tfvars`.
+- `terraform.tfvars` is local-only and ignored by Git through the repo-wide `*.tfvars` rule.
+- Keep secret or machine-specific values such as SSH key paths out of tracked files.
+
+  ```bash
+  terraform plan
   terraform apply
   ```
 
 ## Start Instance
 ```bash
+cd instances
 scripts/start.sh <github token> <ssh user> <path to ssh private key>
 ```
 
 - `start.sh` is the normal runtime bring-up path.
+- Running it from `instances/` matches the GitHub Actions workflow path.
 - It starts or reuses the EC2 instance, updates Route53, runs Ansible reconciliation, and dispatches backend deployment from the latest successful backend CI SHA on `master`.
+- For repeat local runs, prefer an ignored local config file at `instances/scripts/start.local.env` using `instances/scripts/start.local.env.example` as the template.
+- Supported config variables are:
+  - `ADMIN_EMAIL` required
+  - `AWS_REGION` required
+  - `DOMAIN` required
+  - `INSTANCE_TAG_NAME` required
+  - `LETSENCRYPT_BACKUP_AGE_PUBLIC_KEY` optional, enables the backup hook when set
+- The local script generates temporary `instances/ansible/ansible.cfg`, `aws_ec2.yml`, and `vars.yml` files before Ansible runs, then removes them on exit.
+- If local Ansible does not have the `amazon.aws` collection, install it with:
+
+  ```bash
+  ansible-galaxy collection install amazon.aws
+  ```
 
 ## Stop Instance
 ```bash

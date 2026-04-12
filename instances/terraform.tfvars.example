@@ -1,0 +1,5 @@
+# Copy this file to terraform.tfvars for local Terraform runs.
+
+ssh_private_key_path = "/absolute/path/to/private_key"
+ssh_public_key_path  = "/absolute/path/to/public_key.pub"
+ssh_user             = "your-ssh-user"

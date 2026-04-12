@@ -4,11 +4,13 @@
 - Run Packer from `images/`.
 
 ## Required Inputs
-- Create `variables.auto.pkrvars.hcl` and define the inputs used by `image.pkr.hcl`.
+- Copy `variables.auto.pkrvars.hcl.example` to `variables.auto.pkrvars.hcl` and fill in the inputs used by `image.pkr.hcl`.
+- `variables.auto.pkrvars.hcl` is local-only and ignored by Git through the repo-wide `*.pkrvars.hcl` rule.
 - The practically relevant inputs today are:
   - `region`
   - `ssh_public_key_src_path`
   - `ssh_public_key_dest_path`
+  - `admin_email`
   - `letsencrypt_src_path`
   - `letsencrypt_dest_path`
 
@@ -19,5 +21,6 @@
 
 ## Build Command
 ```bash
+cp variables.auto.pkrvars.hcl.example variables.auto.pkrvars.hcl
 packer build -machine-readable -var-file=variables.auto.pkrvars.hcl image.pkr.hcl | tee build.log
 ```

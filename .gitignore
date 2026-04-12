@@ -40,6 +40,7 @@ secrets/
 instances/dns.tf
 instances/ansible/aws_ec2.yml
 instances/ansible/vars.yml
+instances/scripts/start.local.env
 instances/scripts/route53/change-record-set.json
 instances/letsencrypt*
 instances/redis*

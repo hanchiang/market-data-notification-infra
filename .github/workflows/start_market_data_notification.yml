@@ -130,6 +130,7 @@ jobs:
       LETSENCRYPT_BACKUP_AGE_PUBLIC_KEY: ${{ secrets.LETSENCRYPT_BACKUP_AGE_PUBLIC_KEY }}
       AWS_REGION: ${{ secrets.AWS_REGION }}
       HOST_NAME: ${{ secrets.HOST_NAME }}
+      INSTANCE_TAG_NAME: ${{ secrets.INSTANCE_TAG_NAME }}
     steps:
       - uses: actions/checkout@v4
       - name: Set up ansible
@@ -162,26 +163,26 @@ jobs:
 
           # for example, for 2.9: https://github.com/ansible/ansible/blob/stable-2.9/examples/ansible.cfg
           [inventory]
-          enable_plugins = aws_ec2
+          enable_plugins = host_list, script, auto, yaml, ini, toml, amazon.aws.aws_ec2
 
           [defaults]
           host_key_checking = False
+          local_tmp = /tmp/ansible-local
           EOF
 
           # create aws-ec2.yml inventory
           cat << EOF > ./instances/ansible/aws_ec2.yml
-          plugin: aws_ec2
-          regions: us-east-1
-          aws_access_key: $AWS_ACCESS_KEY
-          aws_secret_key: $AWS_SECRET_KEY
+          plugin: amazon.aws.aws_ec2
+          regions:
+            - $AWS_REGION
           keyed_groups:
-            - key: tags
+            - key: ec2_tags
               prefix: tag
-            - key: tags.Name
+            - key: ec2_tags.Name
               separator: ''
           include_filters:
-          - tag:Name:
-            - 'market_data_notification'
+            - tag:Name:
+                - $INSTANCE_TAG_NAME
           EOF
 
           # Create variables

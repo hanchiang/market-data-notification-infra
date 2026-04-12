@@ -1,0 +1,9 @@
+region = "your-region"
+
+ssh_public_key_src_path  = "/absolute/path/to/public_key.pub"
+ssh_public_key_dest_path = "/tmp/public_key.pub"
+
+admin_email = "admin@example.com"
+
+letsencrypt_src_path  = "/absolute/path/to/letsencrypt.zip"
+letsencrypt_dest_path = "/tmp/letsencrypt.zip"
