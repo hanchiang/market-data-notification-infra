@@ -38,6 +38,7 @@ secrets/
 
 # --- Generated/Dynamic Infrastructure Files ---
 instances/dns.tf
+instances/ansible/ansible.cfg
 instances/ansible/aws_ec2.yml
 instances/ansible/vars.yml
 instances/scripts/start.local.env
