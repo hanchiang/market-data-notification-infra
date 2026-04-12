@@ -92,7 +92,7 @@ hostvars_prefix: aws_
 regions:
   - $AWS_REGION
 groups:
-  market_data_notification: ec2_tags.Name == '$INSTANCE_TAG_NAME'
+  market_data_notification: aws_ec2_tags.Name == '$INSTANCE_TAG_NAME'
 include_filters:
   - tag:Name:
       - $INSTANCE_TAG_NAME
