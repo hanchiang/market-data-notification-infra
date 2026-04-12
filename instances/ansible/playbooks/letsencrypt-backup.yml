@@ -5,11 +5,11 @@
   vars_files:
     - ../vars.yml
   vars:
-    letsencrypt_backup_enabled: "{{ (LETSENCRYPT_BACKUP_AGE_RECIPIENT | default('', true) | string | trim | length) > 0 }}"
+    letsencrypt_backup_enabled: "{{ (LETSENCRYPT_BACKUP_AGE_PUBLIC_KEY | default('', true) | string | trim | length) > 0 }}"
   tasks:
-    - name: Skip Let's Encrypt backup installation when no recipient is configured
+    - name: Skip Let's Encrypt backup installation when no public key is configured
       debug:
-        msg: "Skipping Let's Encrypt backup install because LETSENCRYPT_BACKUP_AGE_RECIPIENT is not configured."
+        msg: "Skipping Let's Encrypt backup install because LETSENCRYPT_BACKUP_AGE_PUBLIC_KEY is not configured."
       when: not letsencrypt_backup_enabled
 
     - name: Install packages for Let's Encrypt backup
@@ -40,7 +40,7 @@
         group: root
         mode: "0600"
         content: |
-          LETSENCRYPT_BACKUP_AGE_RECIPIENT={{ LETSENCRYPT_BACKUP_AGE_RECIPIENT }}
+          LETSENCRYPT_BACKUP_AGE_PUBLIC_KEY={{ LETSENCRYPT_BACKUP_AGE_PUBLIC_KEY }}
           LETSENCRYPT_BACKUP_DOMAINS="{{ DOMAINS | join(' ') }}"
       when: letsencrypt_backup_enabled
 

@@ -36,7 +36,7 @@ require_cmd "$AWS_CLI_BIN"
 require_cmd curl
 require_cmd tar
 
-require_var LETSENCRYPT_BACKUP_AGE_RECIPIENT
+require_var LETSENCRYPT_BACKUP_AGE_PUBLIC_KEY
 require_var LETSENCRYPT_BACKUP_DOMAINS
 
 get_imds_token() {
@@ -154,7 +154,7 @@ main() {
   trap cleanup EXIT
 
   tar -czf "$archive_path" -C "$LETSENCRYPT_ROOT" "${TAR_PATHS[@]}"
-  age -r "$LETSENCRYPT_BACKUP_AGE_RECIPIENT" -o "$encrypted_path" "$archive_path"
+  age -r "$LETSENCRYPT_BACKUP_AGE_PUBLIC_KEY" -o "$encrypted_path" "$archive_path"
 
   "$AWS_CLI_BIN" s3 cp \
     --only-show-errors \
