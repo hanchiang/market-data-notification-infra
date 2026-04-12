@@ -1,5 +1,6 @@
 #! /bin/bash
 
+# Poll a Route53 change request until it reaches INSYNC or times out.
 source ./helper/timer.sh
 
 wait_for_route53_change () {

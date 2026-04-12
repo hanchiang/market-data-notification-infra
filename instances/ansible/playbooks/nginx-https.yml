@@ -4,6 +4,10 @@
   gather_facts: no
   vars_files:
     - ../vars.yml
+  vars:
+    letsencrypt_backup_enabled: "{{ (LETSENCRYPT_BACKUP_AGE_PUBLIC_KEY | default('', true) | string | trim | length) > 0 }}"
+    certbot_renew_cli: /usr/bin/certbot --quiet renew
+    certbot_renew_cron_line: "0 12-23 * * * {{ certbot_renew_cli }}"
   tasks:
     - name: Install required packages for SSL
       args:
@@ -49,19 +53,23 @@
           certbot --nginx -d {{ item }} --non-interactive --agree-tos -m {{ ADMIN_EMAIL }}
 
           sleep 10
+
+          {% if letsencrypt_backup_enabled %}
+          /usr/local/sbin/letsencrypt_backup_to_s3.sh
+          {% endif %}
         fi
 
         sudo systemctl force-reload nginx
-        sudo certbot renew --dry-run
+        {{ certbot_renew_cli }} --dry-run
 
         # cron
-        crontab -l > mycron
-        echo "0 12-23 * * * /usr/bin/certbot --quiet renew" >> mycron
+        (crontab -l 2>/dev/null || true) | grep -v -F '/usr/bin/certbot --quiet renew' > mycron || true
+        echo '{{ certbot_renew_cron_line }}' >> mycron
 
-        mv mycron mycron.temp
-        cat mycron.temp | sort | uniq > mycron
-        cp mycron mycron.bak
+        sort -u mycron > mycron.temp
+        mv mycron.temp mycron
         crontab mycron
+        rm -f mycron
     - debug:
         var: item.stdout_lines
       loop: "{{ install_ssl.results }}"
@@ -190,5 +198,3 @@
         sudo systemctl reload nginx
     - debug: var=update_nginx_config.stdout_lines
     - debug: var=update_nginx_config.stderr_lines
-
-

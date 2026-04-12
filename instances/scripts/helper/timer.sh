@@ -2,6 +2,7 @@
 
 set -e
 
+# Lightweight timing helper for polling loops in the operator scripts.
 get_time_elapsed () {
     start_time_in_seconds=$1
 

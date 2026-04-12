@@ -1,0 +1,100 @@
+- hosts: market_data_notification
+  name: Install Let's Encrypt backup flow
+  remote_user: "{{ USER }}"
+  gather_facts: no
+  vars_files:
+    - ../vars.yml
+  vars:
+    letsencrypt_backup_enabled: "{{ (LETSENCRYPT_BACKUP_AGE_PUBLIC_KEY | default('', true) | string | trim | length) > 0 }}"
+    letsencrypt_backup_deploy_hook_path: /etc/letsencrypt/renewal-hooks/deploy/50-market-data-notification-letsencrypt-backup.sh
+  tasks:
+    - name: Remove Let's Encrypt backup hook artifacts when no public key is configured
+      become: yes
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ letsencrypt_backup_deploy_hook_path }}"
+        - /etc/market-data-notification/letsencrypt-backup.env
+        - /usr/local/sbin/letsencrypt_backup_to_s3.sh
+      when: not letsencrypt_backup_enabled
+
+    - name: Skip Let's Encrypt backup installation when no public key is configured
+      debug:
+        msg: "Skipping Let's Encrypt backup install because LETSENCRYPT_BACKUP_AGE_PUBLIC_KEY is not configured."
+      when: not letsencrypt_backup_enabled
+
+    - name: Remove obsolete nginx stable PPA source before apt refresh
+      become: yes
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/apt/sources.list.d/nginx-ubuntu-stable-jammy.list
+        - /etc/apt/sources.list.d/nginx-ubuntu-stable-jammy.list.save
+      when: letsencrypt_backup_enabled
+
+    - name: Install packages for Let's Encrypt backup
+      become: yes
+      apt:
+        name:
+          - age
+          - awscli
+        state: present
+        update_cache: yes
+      when: letsencrypt_backup_enabled
+
+    - name: Ensure backup config directory exists
+      become: yes
+      file:
+        path: /etc/market-data-notification
+        state: directory
+        owner: root
+        group: root
+        mode: "0750"
+      when: letsencrypt_backup_enabled
+
+    - name: Install Let's Encrypt backup env file
+      become: yes
+      copy:
+        dest: /etc/market-data-notification/letsencrypt-backup.env
+        owner: root
+        group: root
+        mode: "0600"
+        content: |
+          LETSENCRYPT_BACKUP_AGE_PUBLIC_KEY={{ LETSENCRYPT_BACKUP_AGE_PUBLIC_KEY }}
+          LETSENCRYPT_BACKUP_DOMAINS="{{ DOMAINS | join(' ') }}"
+      when: letsencrypt_backup_enabled
+
+    - name: Install Let's Encrypt backup script
+      become: yes
+      copy:
+        src: ../files/letsencrypt_backup_to_s3.sh
+        dest: /usr/local/sbin/letsencrypt_backup_to_s3.sh
+        owner: root
+        group: root
+        mode: "0700"
+      when: letsencrypt_backup_enabled
+
+    - name: Ensure certbot deploy-hook directory exists
+      become: yes
+      file:
+        path: /etc/letsencrypt/renewal-hooks/deploy
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      when: letsencrypt_backup_enabled
+
+    - name: Install Let's Encrypt backup deploy hook
+      become: yes
+      copy:
+        dest: "{{ letsencrypt_backup_deploy_hook_path }}"
+        owner: root
+        group: root
+        mode: "0755"
+        content: |
+          #!/bin/bash
+          set -euo pipefail
+          /usr/local/sbin/letsencrypt_backup_to_s3.sh
+      when: letsencrypt_backup_enabled

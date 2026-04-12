@@ -1,10 +1,13 @@
 # https://docs.ansible.com/ansible/latest/collections/amazon/aws/aws_ec2_inventory.html
-plugin: aws_ec2
-regions: us-east-1
-aws_access_key: AWS_ACCESS_KEY
-aws_secret_key: AWS_SECRET_KEY
+plugin: amazon.aws.aws_ec2
+hostvars_prefix: aws_
+regions:
+  - AWS_REGION
 keyed_groups:
-  - key: tags
+  - key: aws_ec2_tags
     prefix: tag
-  - key: tags.Name
+  - key: aws_ec2_tags.Name
     separator: ''
+include_filters:
+  - tag:Name:
+      - INSTANCE_TAG_NAME

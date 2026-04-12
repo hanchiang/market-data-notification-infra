@@ -35,11 +35,16 @@ build.log
 
 # --- Secrets & Credentials ---
 secrets/
+*.agekey
+*.tar.gz.age
+*.tar.gz
 
 # --- Generated/Dynamic Infrastructure Files ---
 instances/dns.tf
+instances/ansible/ansible.cfg
 instances/ansible/aws_ec2.yml
 instances/ansible/vars.yml
+instances/scripts/start.local.env
 instances/scripts/route53/change-record-set.json
 instances/letsencrypt*
 instances/redis*

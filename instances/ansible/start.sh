@@ -1,9 +1,11 @@
 #! /bin/bash
 
-set -u
+set -euo pipefail
 
-dir=$(dirname $0)
-cd $dir
+# Run the host Ansible playbooks in order: install backup prerequisites first,
+# then reconcile nginx and certbot TLS state.
+dir=$(dirname "$0")
+cd "$dir"
 
 SSH_USER=$1
 SSH_PRIVATE_KEY_PATH=$2
@@ -23,11 +25,14 @@ then
     usage
 fi
 
-files=($(ls playbooks/*.yml))
+# Install the encrypted Let's Encrypt backup prerequisites before TLS reconciliation.
+# Backup setup is intentionally non-blocking so a backup-path problem does not
+# prevent the runtime from starting. Successful cert issuance or renewal then
+# triggers the actual upload via certbot deploy hooks.
+if ! ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -u "$SSH_USER" -i aws_ec2.yml --private-key "$SSH_PRIVATE_KEY_PATH" playbooks/letsencrypt-backup.yml
+then
+    echo "Warning: Let's Encrypt backup hook setup failed; continuing startup" >&2
+fi
 
 # Configure ssl for nginx
-ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -u $SSH_USER -i aws_ec2.yml --private-key $SSH_PRIVATE_KEY_PATH playbooks/nginx-https.yml
-
-
-
-
+ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -u "$SSH_USER" -i aws_ec2.yml --private-key "$SSH_PRIVATE_KEY_PATH" playbooks/nginx-https.yml
