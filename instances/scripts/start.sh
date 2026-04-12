@@ -19,6 +19,7 @@ source "$SCRIPT_DIR/helper/timer.sh"
 GITHUB_TOKEN=${1:-}
 SSH_USER=${2:-}
 SSH_PRIVATE_KEY_PATH=${3:-}
+DEFAULT_INSTANCE_TAG_NAME=market_data_notification
 ANSIBLE_DIR="$(cd ../ansible && pwd)"
 ANSIBLE_LOCAL_TEMP_DIR=${ANSIBLE_LOCAL_TEMP:-/tmp/ansible-local}
 ANSIBLE_CONFIG_PATH="$ANSIBLE_DIR/ansible.cfg"
@@ -36,7 +37,7 @@ AWS_REGION=${AWS_REGION:-}
 DOMAIN=${DOMAIN:-}
 ADMIN_EMAIL=${ADMIN_EMAIL:-}
 LETSENCRYPT_BACKUP_AGE_PUBLIC_KEY=${LETSENCRYPT_BACKUP_AGE_PUBLIC_KEY:-}
-INSTANCE_TAG_NAME=${INSTANCE_TAG_NAME:-}
+INSTANCE_TAG_NAME=${INSTANCE_TAG_NAME:-$DEFAULT_INSTANCE_TAG_NAME}
 ROUTE53_HOSTED_ZONE_ID=${ROUTE53_HOSTED_ZONE_ID:-}
 
 usage () {
@@ -83,7 +84,6 @@ require_cmd ansible-doc
 require_env ADMIN_EMAIL "$ADMIN_EMAIL"
 require_env AWS_REGION "$AWS_REGION"
 require_env DOMAIN "$DOMAIN"
-require_env INSTANCE_TAG_NAME "$INSTANCE_TAG_NAME"
 require_env ROUTE53_HOSTED_ZONE_ID "$ROUTE53_HOSTED_ZONE_ID"
 
 export ROUTE53_HOSTED_ZONE_ID
@@ -110,8 +110,6 @@ plugin: amazon.aws.aws_ec2
 hostvars_prefix: aws_
 regions:
   - $AWS_REGION
-groups:
-  market_data_notification: aws_ec2_tags.Name == '$INSTANCE_TAG_NAME'
 include_filters:
   - tag:Name:
       - $INSTANCE_TAG_NAME

@@ -14,6 +14,7 @@ cd "$SCRIPT_DIR"
 
 SSH_USER=${1:-}
 SSH_PRIVATE_KEY_PATH=${2:-}
+DEFAULT_INSTANCE_TAG_NAME=market_data_notification
 ANSIBLE_DIR="$(cd ../ansible && pwd)"
 ANSIBLE_LOCAL_TEMP_DIR=${ANSIBLE_LOCAL_TEMP:-/tmp/ansible-local}
 ANSIBLE_CONFIG_PATH="$ANSIBLE_DIR/ansible.cfg"
@@ -31,7 +32,7 @@ AWS_REGION=${AWS_REGION:-}
 DOMAIN=${DOMAIN:-}
 ADMIN_EMAIL=${ADMIN_EMAIL:-}
 LETSENCRYPT_BACKUP_AGE_PUBLIC_KEY=${LETSENCRYPT_BACKUP_AGE_PUBLIC_KEY:-}
-INSTANCE_TAG_NAME=${INSTANCE_TAG_NAME:-}
+INSTANCE_TAG_NAME=${INSTANCE_TAG_NAME:-$DEFAULT_INSTANCE_TAG_NAME}
 
 usage() {
     echo "usage: <path/to/script> <ssh user> <ssh private key path>" >&2
@@ -67,7 +68,6 @@ require_cmd ansible-doc
 require_env ADMIN_EMAIL "$ADMIN_EMAIL"
 require_env AWS_REGION "$AWS_REGION"
 require_env DOMAIN "$DOMAIN"
-require_env INSTANCE_TAG_NAME "$INSTANCE_TAG_NAME"
 
 mkdir -p "$ANSIBLE_LOCAL_TEMP_DIR"
 
@@ -91,8 +91,6 @@ plugin: amazon.aws.aws_ec2
 hostvars_prefix: aws_
 regions:
   - $AWS_REGION
-groups:
-  market_data_notification: aws_ec2_tags.Name == '$INSTANCE_TAG_NAME'
 include_filters:
   - tag:Name:
       - $INSTANCE_TAG_NAME

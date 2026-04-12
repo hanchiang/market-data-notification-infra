@@ -112,7 +112,7 @@ scripts/start.sh <github token> <ssh user> <path to ssh private key>
   - `ADMIN_EMAIL` required
   - `AWS_REGION` required
   - `DOMAIN` required
-  - `INSTANCE_TAG_NAME` required
+  - `INSTANCE_TAG_NAME` optional override; defaults to the Terraform-managed EC2 `Name` tag `market_data_notification`
   - `ROUTE53_HOSTED_ZONE_ID` required
   - `LETSENCRYPT_BACKUP_AGE_PUBLIC_KEY` optional, enables the backup hook when set
 - The local script generates temporary `instances/ansible/ansible.cfg`, `aws_ec2.yml`, and `vars.yml` files before Ansible runs, then removes them on exit.
