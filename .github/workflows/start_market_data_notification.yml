@@ -127,10 +127,10 @@ jobs:
       DOMAIN: ${{ secrets.DOMAIN }}
       SSH_USER: ${{ secrets.SSH_USER }}
       ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
-      LETSENCRYPT_BACKUP_AGE_PUBLIC_KEY: ${{ secrets.LETSENCRYPT_BACKUP_AGE_PUBLIC_KEY }}
+      LETSENCRYPT_BACKUP_AGE_PUBLIC_KEY: ${{ vars.LETSENCRYPT_BACKUP_AGE_PUBLIC_KEY }}
       AWS_REGION: ${{ secrets.AWS_REGION }}
       HOST_NAME: ${{ secrets.HOST_NAME }}
-      INSTANCE_TAG_NAME: ${{ secrets.INSTANCE_TAG_NAME }}
+      INSTANCE_TAG_NAME: ${{ vars.INSTANCE_TAG_NAME }}
     steps:
       - uses: actions/checkout@v4
       - name: Set up ansible

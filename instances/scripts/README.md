@@ -28,6 +28,7 @@ scripts/start.sh <github token> <ssh user> <path to ssh private key>
   - `AWS_REGION` required
   - `DOMAIN` required
   - `INSTANCE_TAG_NAME` required
+  - `ROUTE53_HOSTED_ZONE_ID` required
   - `LETSENCRYPT_BACKUP_AGE_PUBLIC_KEY` optional
 - Local prerequisites:
   - AWS credentials must already be available through the normal AWS SDK/CLI credential chain
