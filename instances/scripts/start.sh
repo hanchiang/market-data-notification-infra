@@ -1,6 +1,8 @@
 #! /bin/bash
 set -euo pipefail
 
+# Full operator start path: ensure the instance is running, reconcile DNS and host config,
+# then dispatch the backend deploy workflow once infra is ready.
 if [[ "${BASH_SOURCE[0]}" != "$0" ]]
 then
     echo "Run this script directly, do not source it." >&2

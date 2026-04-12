@@ -1,6 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
+# Package the minimal Let's Encrypt recovery state, encrypt it with age,
+# and upload the archive to the configured S3 backup location.
 readonly DEFAULT_ENV_FILE="/etc/market-data-notification/letsencrypt-backup.env"
 ENV_FILE="${LETSENCRYPT_BACKUP_ENV_FILE:-$DEFAULT_ENV_FILE}"
 LETSENCRYPT_ROOT="${LETSENCRYPT_BACKUP_ROOT:-/etc/letsencrypt}"

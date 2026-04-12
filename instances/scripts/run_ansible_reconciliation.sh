@@ -1,6 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
+# Host-only reconciliation wrapper for the Ansible playbooks used by start.sh.
+# This avoids Route53 updates and backend deploy side effects during restore checks.
 if [[ "${BASH_SOURCE[0]}" != "$0" ]]
 then
     echo "Run this script directly, do not source it." >&2

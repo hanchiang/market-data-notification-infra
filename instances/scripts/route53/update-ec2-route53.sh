@@ -2,6 +2,7 @@
 
 set -euo pipefail
 
+# Idempotent Route53 helper for the service A record used by the start/stop scripts.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 

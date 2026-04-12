@@ -2,6 +2,8 @@
 
 set -euo pipefail
 
+# Run the host Ansible playbooks in order: install backup prerequisites first,
+# then reconcile nginx and certbot TLS state.
 dir=$(dirname "$0")
 cd "$dir"
 
