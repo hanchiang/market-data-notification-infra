@@ -141,44 +141,63 @@ scripts/stop.sh
 - Treat direct playbook execution as a debugging or change-validation path, not the default operator workflow.
 
 ## Let's Encrypt Backup Rollout Checklist
-1. Review `main.tf` and confirm the intended live delta is limited to:
+1. On a trusted operator machine, generate a dedicated `age` keypair for Let's Encrypt backup decryption:
+
+   ```bash
+   age-keygen -o letsencrypt-backup.agekey
+   ```
+
+   - Keep `letsencrypt-backup.agekey` private, off-host, and outside the Git working tree when possible.
+   - If it is ever created inside the repo by mistake, the repo ignores `*.agekey`, but do not rely on that as the primary safeguard.
+   - Record the printed public key (`age1...`) for the backup configuration.
+
+2. Review `main.tf` and confirm the intended live delta is limited to:
    - one S3 backup bucket
    - bucket versioning, server-side encryption, lifecycle retention, and public-access block
    - one IAM role and instance profile
    - attachment of the instance profile to the EC2 instance
    - one public-subnet update to enable automatic public IPv4 assignment on launch, replacing the previous instance-level public-IP setting
-2. Confirm the GitHub Actions secret `LETSENCRYPT_BACKUP_AGE_PUBLIC_KEY` is set to the correct operator public key.
-3. Keep the existing AMI-time Let's Encrypt copy path in place for the first rollout.
-4. Run a read-only `terraform plan` against the real remote workspace.
-5. Stop if the plan shows instance replacement, bucket destruction or rename, or drift beyond the listed instance-profile and public-subnet changes.
-6. Apply in a low-risk window where a short startup issue is acceptable.
-7. Trigger one controlled start flow.
-8. Verify TLS still succeeds before treating backup validation as meaningful.
-9. Confirm the host now has:
+3. Set `LETSENCRYPT_BACKUP_AGE_PUBLIC_KEY` to that operator public key in the chosen runtime config:
+   - GitHub Actions variable for workflow-driven starts
+   - local `instances/scripts/start.local.env` for local `start.sh` runs
+4. Keep the existing AMI-time Let's Encrypt copy path in place for the first rollout.
+5. Run a read-only `terraform plan` against the real remote workspace.
+6. Stop if the plan shows instance replacement, bucket destruction or rename, or drift beyond the listed instance-profile and public-subnet changes.
+7. Apply in a low-risk window where a short startup issue is acceptable.
+8. Trigger one controlled start flow.
+9. Verify TLS still succeeds before treating backup validation as meaningful.
+10. Confirm the host now has:
    - `/etc/market-data-notification/letsencrypt-backup.env`
    - `/usr/local/sbin/letsencrypt_backup_to_s3.sh`
    - `/etc/letsencrypt/renewal-hooks/deploy/50-market-data-notification-letsencrypt-backup.sh`
-10. If this rollout reused an already-valid certificate and did not issue or renew one during startup, seed the first backup manually on the host:
+11. If this rollout reused an already-valid certificate and did not issue or renew one during startup, seed the first backup manually on the host:
 
     ```bash
     sudo /usr/local/sbin/letsencrypt_backup_to_s3.sh
     ```
 
-11. From a trusted operator machine, verify a fresh object exists in:
+12. From a trusted operator machine, verify a fresh object exists in:
 
     ```bash
     aws s3 ls "s3://market-data-notification-le-backup-<account-id>-<region>/letsencrypt/<hostname>/"
     ```
 
-12. Download one encrypted archive, decrypt it with the operator private key, and inspect the tar members for:
+13. Download one encrypted archive, decrypt it with the operator private key, and inspect the tar members for:
+
+    ```bash
+    aws s3 cp "s3://market-data-notification-le-backup-<account-id>-<region>/letsencrypt/<hostname>/<timestamp>.tar.gz.age" .
+    age -d -i letsencrypt-backup.agekey -o letsencrypt-backup.tar.gz "<timestamp>.tar.gz.age"
+    tar -tzf letsencrypt-backup.tar.gz
+    ```
+
     - `accounts/`
     - `live/<domain>/`
     - `archive/<domain>/`
     - `renewal/<domain>.conf`
-13. Confirm the seed or hook-triggered upload succeeds and prints or results in the expected S3 object path.
-14. Rehearse restore on a non-production target if possible:
+14. Confirm the seed or hook-triggered upload succeeds and prints or results in the expected S3 object path.
+15. Rehearse restore on a non-production target if possible:
     - restore the decrypted Let's Encrypt state onto the target host
     - rerun TLS reconciliation
     - confirm nginx starts with the restored cert material
-15. Treat forced renewal as troubleshooting guidance, not the primary restore-validation step.
-16. Only after a successful restore rehearsal, decide whether to retire the older Packer-time Let's Encrypt copy path.
+16. Treat forced renewal as troubleshooting guidance, not the primary restore-validation step.
+17. Only after a successful restore rehearsal, decide whether to retire the older Packer-time Let's Encrypt copy path.

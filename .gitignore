@@ -35,6 +35,7 @@ build.log
 
 # --- Secrets & Credentials ---
 secrets/
+*.agekey
 
 # --- Generated/Dynamic Infrastructure Files ---
 instances/dns.tf

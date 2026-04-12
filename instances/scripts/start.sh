@@ -29,6 +29,7 @@ DOMAIN=${DOMAIN:-}
 ADMIN_EMAIL=${ADMIN_EMAIL:-}
 LETSENCRYPT_BACKUP_AGE_PUBLIC_KEY=${LETSENCRYPT_BACKUP_AGE_PUBLIC_KEY:-}
 INSTANCE_TAG_NAME=${INSTANCE_TAG_NAME:-}
+ROUTE53_HOSTED_ZONE_ID=${ROUTE53_HOSTED_ZONE_ID:-}
 
 usage () {
     echo "Invalid $1. usage: <path/to/script> <github token> <ssh user> <ssh private key path>"
@@ -75,6 +76,9 @@ require_env ADMIN_EMAIL "$ADMIN_EMAIL"
 require_env AWS_REGION "$AWS_REGION"
 require_env DOMAIN "$DOMAIN"
 require_env INSTANCE_TAG_NAME "$INSTANCE_TAG_NAME"
+require_env ROUTE53_HOSTED_ZONE_ID "$ROUTE53_HOSTED_ZONE_ID"
+
+export ROUTE53_HOSTED_ZONE_ID
 
 mkdir -p "$ANSIBLE_LOCAL_TEMP_DIR"
 
@@ -275,8 +279,9 @@ deploy_workflow=$(curl -fsSL -H "Accept: application/vnd.github+json" -H "Author
 printf "\n"
 
 workflow_id=$(echo "$deploy_workflow" | jq -r '.id')
+deploy_payload=$(jq -n --arg image_sha "$deploy_image_sha" '{ref:"master",inputs:{image_sha:$image_sha,allow_unverified_image:"true"}}')
 curl -fsSL -X POST  -H "Accept: application/vnd.github+json" -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/hanchiang/market-data-notification/actions/workflows/$workflow_id/dispatches" \
- -d "{\"ref\":\"master\",\"inputs\":{\"image_sha\":\"$deploy_image_sha\",\"allow_unverified_image\":\"true\"}}"
+ -d "$deploy_payload"
 printf "\n"
 
 echo "Script completed in $SECONDS seconds"

@@ -24,6 +24,16 @@
         msg: "Skipping Let's Encrypt backup install because LETSENCRYPT_BACKUP_AGE_PUBLIC_KEY is not configured."
       when: not letsencrypt_backup_enabled
 
+    - name: Remove obsolete nginx stable PPA source before apt refresh
+      become: yes
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/apt/sources.list.d/nginx-ubuntu-stable-jammy.list
+        - /etc/apt/sources.list.d/nginx-ubuntu-stable-jammy.list.save
+      when: letsencrypt_backup_enabled
+
     - name: Install packages for Let's Encrypt backup
       become: yes
       apt:
