@@ -138,6 +138,7 @@ scripts/stop.sh
 - The actual backup upload is triggered by successful certificate issuance or renewal, not by every start run.
   - first issuance seeds a backup immediately after successful `certbot --nginx`
   - later renewals use the certbot deploy hook
+- The normal startup path does not run `certbot renew --dry-run` on every start when the certificate already exists. Renewal rehearsal stays coupled to first-time issuance rather than routine startup.
 - Treat direct playbook execution as a debugging or change-validation path, not the default operator workflow.
 
 ## Let's Encrypt Backup Rollout Checklist
