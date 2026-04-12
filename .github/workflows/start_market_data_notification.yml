@@ -173,12 +173,13 @@ jobs:
           # create aws-ec2.yml inventory
           cat << EOF > ./instances/ansible/aws_ec2.yml
           plugin: amazon.aws.aws_ec2
+          hostvars_prefix: aws_
           regions:
             - $AWS_REGION
           keyed_groups:
-            - key: ec2_tags
+            - key: aws_ec2_tags
               prefix: tag
-            - key: ec2_tags.Name
+            - key: aws_ec2_tags.Name
               separator: ''
           include_filters:
             - tag:Name:
@@ -192,6 +193,7 @@ jobs:
           DOMAINS:
             - $DOMAIN
           ADMIN_EMAIL: $ADMIN_EMAIL
+          ansible_python_interpreter: /usr/bin/python3
           LETSENCRYPT_BACKUP_AGE_PUBLIC_KEY: "$LETSENCRYPT_BACKUP_AGE_PUBLIC_KEY"
           EOF
       - name: Create AWS config and credentials

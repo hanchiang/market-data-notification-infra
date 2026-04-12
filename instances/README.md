@@ -185,6 +185,16 @@ scripts/stop.sh
 13. Download one encrypted archive, decrypt it with the operator private key, and inspect the tar members for:
 
     ```bash
+    cd instances/scripts
+    ./download_letsencrypt_backup.sh \
+      --hostname <hostname> \
+      --age-key /secure/path/to/letsencrypt-backup.agekey \
+      --region <aws-region>
+    ```
+
+    Or run the equivalent commands manually:
+
+    ```bash
     aws s3 cp "s3://market-data-notification-le-backup-<account-id>-<region>/letsencrypt/<hostname>/<timestamp>.tar.gz.age" .
     age -d -i letsencrypt-backup.agekey -o letsencrypt-backup.tar.gz "<timestamp>.tar.gz.age"
     tar -tzf letsencrypt-backup.tar.gz
@@ -196,8 +206,49 @@ scripts/stop.sh
     - `renewal/<domain>.conf`
 14. Confirm the seed or hook-triggered upload succeeds and prints or results in the expected S3 object path.
 15. Rehearse restore on a non-production target if possible:
-    - restore the decrypted Let's Encrypt state onto the target host
-    - rerun TLS reconciliation
-    - confirm nginx starts with the restored cert material
+    - Use a Linux target or Linux filesystem path for extraction. The archive preserves the `live/<domain>` symlinks into `archive/<domain>`, so extracting through a Windows path such as `\\wsl.localhost\...` can fail even when the archive is valid.
+    - Copy the decrypted archive onto the target host, for example `/tmp/letsencrypt-backup.tar.gz`.
+    - If the target already has Let's Encrypt state, make a reversible backup first:
+
+      ```bash
+      sudo mv /etc/letsencrypt /etc/letsencrypt.before-restore.$(date -u +%Y-%m-%dT%H-%M-%SZ)
+      sudo mkdir -p /etc/letsencrypt
+      ```
+
+    - Extract to a temporary directory and verify the expected tree before touching the live path:
+
+      ```bash
+      sudo mkdir -p /tmp/letsencrypt-restore
+      sudo tar -xzf /tmp/letsencrypt-backup.tar.gz -C /tmp/letsencrypt-restore
+      sudo tar -tzf /tmp/letsencrypt-backup.tar.gz | sed -n '1,40p'
+      sudo ls -l /tmp/letsencrypt-restore/live/<domain>
+      ```
+
+    - Restore the archived state into `/etc/letsencrypt` with metadata and symlinks preserved:
+
+      ```bash
+      sudo cp -a /tmp/letsencrypt-restore/accounts /etc/letsencrypt/
+      sudo cp -a /tmp/letsencrypt-restore/archive /etc/letsencrypt/
+      sudo cp -a /tmp/letsencrypt-restore/live /etc/letsencrypt/
+      sudo cp -a /tmp/letsencrypt-restore/renewal /etc/letsencrypt/
+      ```
+
+    - Confirm the restored `live/<domain>` files are still symlinks into `../../archive/<domain>/...`, and that `fullchain.pem` plus `privkey.pem` exist for each restored domain.
+    - From the operator machine, rerun the host-only reconciliation path so nginx, certbot, and the backup hook are reconciled against the restored state without Route53 or backend deploy side effects:
+
+      ```bash
+      cd instances/scripts
+      ./run_ansible_reconciliation.sh <ssh-user> <path-to-ssh-private-key>
+      ```
+
+    - On the target host, confirm nginx accepts the restored certificate material:
+
+      ```bash
+      sudo nginx -t
+      sudo systemctl status nginx --no-pager
+      sudo ls -l /etc/letsencrypt/live/<domain>
+      ```
+
+    - Treat a forced renewal as troubleshooting guidance only. The first restore validation goal is that nginx and the existing restored certificate state work without needing immediate certificate replacement.
 16. Treat forced renewal as troubleshooting guidance, not the primary restore-validation step.
 17. Only after a successful restore rehearsal, decide whether to retire the older Packer-time Let's Encrypt copy path.

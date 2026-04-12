@@ -1,6 +1,12 @@
 #! /bin/bash
 set -euo pipefail
 
+if [[ "${BASH_SOURCE[0]}" != "$0" ]]
+then
+    echo "Run this script directly, do not source it." >&2
+    return 1 2>/dev/null || exit 1
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
@@ -99,12 +105,13 @@ fi
 
 cat << EOF > "$ANSIBLE_INVENTORY_PATH"
 plugin: amazon.aws.aws_ec2
+hostvars_prefix: aws_
 regions:
   - $AWS_REGION
 keyed_groups:
-  - key: ec2_tags
+  - key: aws_ec2_tags
     prefix: tag
-  - key: ec2_tags.Name
+  - key: aws_ec2_tags.Name
     separator: ''
 include_filters:
   - tag:Name:
@@ -117,6 +124,7 @@ DOMAIN: $DOMAIN
 DOMAINS:
   - $DOMAIN
 ADMIN_EMAIL: $ADMIN_EMAIL
+ansible_python_interpreter: /usr/bin/python3
 LETSENCRYPT_BACKUP_AGE_PUBLIC_KEY: "$LETSENCRYPT_BACKUP_AGE_PUBLIC_KEY"
 EOF
 
@@ -275,13 +283,21 @@ then
     echo "No deploy image SHA resolved from CI"
     exit 1
 fi
-deploy_workflow=$(curl -fsSL -H "Accept: application/vnd.github+json" -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/hanchiang/market-data-notification/actions/workflows" | jq '.workflows[] | select(.state == "active" and select(.name | ascii_downcase | contains("build and deploy")))')
+deploy_workflow_json=$(curl -fsSL \
+    -H "Accept: application/vnd.github+json" \
+    -H "Authorization: token $GITHUB_TOKEN" \
+    "https://api.github.com/repos/hanchiang/market-data-notification/actions/workflows")
+deploy_workflow=$(jq '.workflows[] | select(.state == "active" and (.name | ascii_downcase | contains("build and deploy")))' <<< "$deploy_workflow_json")
 printf "\n"
 
 workflow_id=$(echo "$deploy_workflow" | jq -r '.id')
 deploy_payload=$(jq -n --arg image_sha "$deploy_image_sha" '{ref:"master",inputs:{image_sha:$image_sha,allow_unverified_image:"true"}}')
-curl -fsSL -X POST  -H "Accept: application/vnd.github+json" -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/hanchiang/market-data-notification/actions/workflows/$workflow_id/dispatches" \
- -d "$deploy_payload"
+curl -fsSL \
+    -X POST \
+    -H "Accept: application/vnd.github+json" \
+    -H "Authorization: token $GITHUB_TOKEN" \
+    "https://api.github.com/repos/hanchiang/market-data-notification/actions/workflows/$workflow_id/dispatches" \
+    -d "$deploy_payload"
 printf "\n"
 
 echo "Script completed in $SECONDS seconds"
