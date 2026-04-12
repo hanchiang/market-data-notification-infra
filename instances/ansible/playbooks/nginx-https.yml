@@ -7,7 +7,6 @@
   vars:
     letsencrypt_backup_enabled: "{{ (LETSENCRYPT_BACKUP_AGE_PUBLIC_KEY | default('', true) | string | trim | length) > 0 }}"
     certbot_renew_cli: /usr/bin/certbot --quiet renew
-    certbot_renew_cron_line: "0 12-23 * * * {{ certbot_renew_cli }}"
   tasks:
     - name: Install required packages for SSL
       args:
@@ -57,10 +56,11 @@
           {% if letsencrypt_backup_enabled %}
           /usr/local/sbin/letsencrypt_backup_to_s3.sh
           {% endif %}
+
+          {{ certbot_renew_cli }} --dry-run
         fi
 
         sudo systemctl force-reload nginx
-        {{ certbot_renew_cli }} --dry-run
     - debug:
         var: item.stdout_lines
       loop: "{{ install_ssl.results }}"
