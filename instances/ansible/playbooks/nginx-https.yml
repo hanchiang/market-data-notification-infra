@@ -1,4 +1,4 @@
-- hosts: market_data_notification
+- hosts: all
   name: Install SSL for nginx, configure nginx
   remote_user: "{{ USER }}"
   gather_facts: no

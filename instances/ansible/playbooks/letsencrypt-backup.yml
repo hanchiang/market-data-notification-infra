@@ -1,4 +1,4 @@
-- hosts: market_data_notification
+- hosts: all
   name: Install Let's Encrypt backup flow
   remote_user: "{{ USER }}"
   gather_facts: no
