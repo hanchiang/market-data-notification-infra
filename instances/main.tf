@@ -45,9 +45,11 @@ resource "aws_internet_gateway" "igw" {
 }
 
 resource "aws_subnet" "subnet_public" {
-  vpc_id                  = aws_vpc.vpc.id
-  cidr_block              = var.cidr_subnet
-  availability_zone       = var.ec2_az
+  vpc_id            = aws_vpc.vpc.id
+  cidr_block        = var.cidr_subnet
+  availability_zone = var.ec2_az
+  # Keep public IPv4 assignment at the subnet so existing instances avoid
+  # replacement from immutable instance-level associate_public_ip_address drift.
   map_public_ip_on_launch = true
   tags = {
     Name = "market_data_notification"
