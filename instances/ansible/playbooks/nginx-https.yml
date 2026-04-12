@@ -61,18 +61,20 @@
 
         sudo systemctl force-reload nginx
         {{ certbot_renew_cli }} --dry-run
-
-        # cron
-        (crontab -l 2>/dev/null || true) | grep -v -F '/usr/bin/certbot --quiet renew' > mycron || true
-        echo '{{ certbot_renew_cron_line }}' >> mycron
-
-        sort -u mycron > mycron.temp
-        mv mycron.temp mycron
-        crontab mycron
-        rm -f mycron
     - debug:
         var: item.stdout_lines
       loop: "{{ install_ssl.results }}"
+
+    - name: Ensure certbot renew cron job is present
+      become: yes
+      become_method: su
+      become_user: root
+      become_exe: "sudo su -"
+      cron:
+        name: market-data-notification certbot renew
+        minute: "0"
+        hour: "12-23"
+        job: "{{ certbot_renew_cli }}"
 
     - name: Configure common nginx config
       args:
