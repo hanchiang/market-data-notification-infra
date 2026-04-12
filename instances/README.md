@@ -110,6 +110,8 @@ scripts/stop.sh
   - `playbooks/nginx-https.yml`
 - The backup playbook installs the encrypt-and-upload script, env file, and certbot deploy hook.
 - The actual backup upload is triggered by successful certificate issuance or renewal, not by every start run.
+  - first issuance seeds a backup immediately after successful `certbot --nginx`
+  - later renewals use the certbot deploy hook
 - Treat direct playbook execution as a debugging or change-validation path, not the default operator workflow.
 
 ## Let's Encrypt Backup Rollout Checklist

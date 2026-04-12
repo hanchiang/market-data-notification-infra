@@ -6,8 +6,8 @@
     - ../vars.yml
   vars:
     letsencrypt_backup_enabled: "{{ (LETSENCRYPT_BACKUP_AGE_PUBLIC_KEY | default('', true) | string | trim | length) > 0 }}"
-    certbot_renew_command: >-
-      /usr/bin/certbot --quiet renew{% if letsencrypt_backup_enabled %} --deploy-hook /usr/local/sbin/letsencrypt_backup_to_s3.sh{% endif %}
+    certbot_renew_cli: /usr/bin/certbot --quiet renew
+    certbot_renew_cron_line: "0 12-23 * * * {{ certbot_renew_cli }}"
   tasks:
     - name: Install required packages for SSL
       args:
@@ -50,17 +50,21 @@
           echo "Saving a backup of /etc/nginx/sites-available/{{ DOMAIN }}"
           cp /etc/nginx/sites-available/{{ DOMAIN }} /etc/nginx/sites-available/{{ DOMAIN }}.bak
 
-          certbot --nginx -d {{ item }} --non-interactive --agree-tos -m {{ ADMIN_EMAIL }}{% if letsencrypt_backup_enabled %} --deploy-hook /usr/local/sbin/letsencrypt_backup_to_s3.sh{% endif %}
+          certbot --nginx -d {{ item }} --non-interactive --agree-tos -m {{ ADMIN_EMAIL }}
 
           sleep 10
+
+          {% if letsencrypt_backup_enabled %}
+          /usr/local/sbin/letsencrypt_backup_to_s3.sh
+          {% endif %}
         fi
 
         sudo systemctl force-reload nginx
-        sudo certbot renew --dry-run
+        {{ certbot_renew_cli }} --dry-run
 
         # cron
         (crontab -l 2>/dev/null || true) | grep -v -F '/usr/bin/certbot --quiet renew' > mycron || true
-        echo '{{ certbot_renew_command }}' >> mycron
+        echo '{{ certbot_renew_cron_line }}' >> mycron
 
         sort -u mycron > mycron.temp
         mv mycron.temp mycron
@@ -194,4 +198,3 @@
         sudo systemctl reload nginx
     - debug: var=update_nginx_config.stdout_lines
     - debug: var=update_nginx_config.stderr_lines
-
