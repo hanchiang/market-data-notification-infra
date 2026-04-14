@@ -57,6 +57,7 @@ cd instances/scripts
 - Downloads the latest encrypted Let's Encrypt backup for a host from S3 by default
 - Decrypts it with the operator `age` private key
 - Lists the tar members so the backup can be verified quickly
+- Optionally extracts the decrypted tarball into an explicit directory for restore rehearsal
 
 ```bash
 cd instances/scripts
@@ -70,4 +71,5 @@ cd instances/scripts
 - If `--s3-key` is omitted, the script downloads the most recently uploaded object under `letsencrypt/<hostname>/`.
 - By default, it writes the encrypted and decrypted files to the current directory.
 - Use `--output-dir` to write them somewhere else.
+- Use `--extract-dir <path>` to unpack the decrypted archive after download. Prefer a Linux filesystem path because the preserved `live/<domain>` symlinks can fail on Windows-style extraction paths.
 - The repo ignores `*.tar.gz.age` and `*.tar.gz` so downloaded backup artifacts are not staged accidentally.

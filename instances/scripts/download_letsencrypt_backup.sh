@@ -16,6 +16,7 @@ Optional:
   --region <region>         AWS region used to derive the default bucket name.
   --s3-key <key>            Download a specific S3 object key instead of the latest one.
   --output-dir <path>       Directory for the downloaded and decrypted files. Default: current directory.
+  --extract-dir <path>      Extract the decrypted tarball into the given directory after download.
   --s3-prefix <prefix>      Backup object prefix. Default: letsencrypt.
   --skip-list               Skip listing decrypted tar members after download.
   -h, --help                Show this help text.
@@ -90,6 +91,7 @@ BUCKET_NAME=""
 AWS_REGION_ARG=""
 S3_KEY=""
 OUTPUT_DIR="$PWD"
+EXTRACT_DIR=""
 S3_PREFIX="${LETSENCRYPT_BACKUP_S3_PREFIX:-letsencrypt}"
 LIST_TAR_CONTENTS=true
 
@@ -118,6 +120,10 @@ do
             ;;
         --output-dir)
             OUTPUT_DIR="${2:-}"
+            shift 2
+            ;;
+        --extract-dir)
+            EXTRACT_DIR="${2:-}"
             shift 2
             ;;
         --s3-prefix)
@@ -192,4 +198,11 @@ if [[ "$LIST_TAR_CONTENTS" == true ]]
 then
     echo "Archive contents:"
     tar -tzf "$DECRYPTED_PATH"
+fi
+
+if [[ -n "$EXTRACT_DIR" ]]
+then
+    mkdir -p "$EXTRACT_DIR"
+    tar -xzf "$DECRYPTED_PATH" -C "$EXTRACT_DIR"
+    echo "Extracted archive to: $EXTRACT_DIR"
 fi

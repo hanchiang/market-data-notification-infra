@@ -66,11 +66,12 @@ This project is the infrastructure as code management for [Market data notificat
 
 ## 5. Validate live changes carefully
 - For the current Let's Encrypt backup work, use the canonical rollout and restore checklist in [`instances/README.md`](instances/README.md).
+- The restore checklist includes the operator-side `scp` step for copying the decrypted `.tar.gz` archive onto the target host before extraction and reconciliation.
 - Keep the older Packer-time Let's Encrypt artifact path as compatibility state until restore has been exercised successfully.
 
 # Canonical Docs
 - Packer usage: [`images/README.md`](images/README.md)
-- Terraform backend, state, apply safety, and Let's Encrypt rollout checklist: [`instances/README.md`](instances/README.md)
+- Terraform backend, state, apply safety, and Let's Encrypt rollout plus restore checklists: [`instances/README.md`](instances/README.md)
 - Start and stop scripts: [`instances/scripts/README.md`](instances/scripts/README.md)
 
 # Diagram
