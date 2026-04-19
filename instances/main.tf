@@ -222,7 +222,7 @@ resource "aws_instance" "web" {
   root_block_device {
     delete_on_termination = true
     volume_size           = 20
-    volume_type           = "gp2"
+    volume_type           = "gp3"
 
     tags = {
       Name = "market_data_notification"
