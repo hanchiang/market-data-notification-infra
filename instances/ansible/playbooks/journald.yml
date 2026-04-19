@@ -1,0 +1,56 @@
+- hosts: all
+  name: Configure journald retention
+  remote_user: "{{ USER }}"
+  gather_facts: no
+  vars_files:
+    - ../vars.yml
+  vars:
+    journald_system_max_use: 1G
+  tasks:
+    - name: Ensure journald config drop-in directory exists
+      become: yes
+      become_method: su
+      become_user: root
+      become_exe: "sudo su -"
+      file:
+        path: /etc/systemd/journald.conf.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install journald retention override
+      become: yes
+      become_method: su
+      become_user: root
+      become_exe: "sudo su -"
+      copy:
+        src: ../files/market_data_notification_journald.conf
+        dest: /etc/systemd/journald.conf.d/market-data-notification.conf
+        owner: root
+        group: root
+        mode: "0644"
+      register: journald_dropin
+      notify: Restart systemd-journald
+
+    - name: Apply journald restart before cleanup when config changes
+      meta: flush_handlers
+      when: journald_dropin.changed
+
+    - name: Vacuum persistent journals after retention change
+      become: yes
+      become_method: su
+      become_user: root
+      become_exe: "sudo su -"
+      command: journalctl --rotate --vacuum-size={{ journald_system_max_use }}
+      when: journald_dropin.changed
+
+  handlers:
+    - name: Restart systemd-journald
+      become: yes
+      become_method: su
+      become_user: root
+      become_exe: "sudo su -"
+      service:
+        name: systemd-journald
+        state: restarted

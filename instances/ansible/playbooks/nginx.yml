@@ -1,0 +1,64 @@
+- hosts: all
+  name: Configure nginx
+  remote_user: "{{ USER }}"
+  gather_facts: no
+  vars_files:
+    - ../vars.yml
+  tasks:
+    - name: Ensure common nginx config directory exists
+      become: yes
+      file:
+        path: /etc/nginx/common
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install common nginx config fragments
+      become: yes
+      copy:
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+        owner: root
+        group: root
+        mode: "0644"
+      loop:
+        - src: ../files/nginx/json_log.conf
+          dest: /etc/nginx/common/json_log.conf
+        - src: ../files/nginx/market_data_notification_upstream.conf
+          dest: /etc/nginx/common/market_data_notification_upstream.conf
+        - src: ../files/nginx/market_data_notification_proxy.conf
+          dest: /etc/nginx/common/market_data_notification_proxy.conf
+        - src: ../files/nginx/favicon_location.conf
+          dest: /etc/nginx/common/favicon_location.conf
+      notify: Validate and reload nginx
+
+    - name: Install main nginx site config
+      become: yes
+      template:
+        src: ../templates/nginx/market_data_notification_site.conf.j2
+        dest: "/etc/nginx/sites-available/{{ DOMAIN }}"
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Validate and reload nginx
+
+    - name: Ensure nginx site is enabled
+      become: yes
+      file:
+        src: "/etc/nginx/sites-available/{{ DOMAIN }}"
+        dest: "/etc/nginx/sites-enabled/{{ DOMAIN }}"
+        state: link
+        force: true
+      notify: Validate and reload nginx
+
+  handlers:
+    - name: Validate and reload nginx
+      become: yes
+      become_method: su
+      become_user: root
+      become_exe: "sudo su -"
+      shell: |
+        set -e
+        nginx -t
+        systemctl reload nginx

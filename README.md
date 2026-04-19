@@ -21,7 +21,7 @@ This project is the infrastructure as code management for [Market data notificat
 - Ansible for local script-driven reconciliation flows
 - `jq`, `curl`, and `aws` CLI for the helper scripts
 - SSH access to the target EC2 instance
-- GitHub token access when using `instances/scripts/start.sh`, because that script resolves the latest successful backend build and dispatches deployment
+- GitHub token access when using the default `instances/scripts/start.sh` path, because that script resolves the latest successful backend build and dispatches deployment unless `--skip-deploy` is set
 
 # Operator Workflow
 ## 1. Build the base AMI with Packer
@@ -53,7 +53,8 @@ This project is the infrastructure as code management for [Market data notificat
   - starts the EC2 instance if needed
   - updates Route53
   - calls `instances/ansible/start.sh`
-  - dispatches the backend deploy workflow using the latest successful backend CI SHA on `master`
+  - dispatches the backend deploy workflow using the latest successful backend CI SHA on `master` by default
+  - can skip the deploy dispatch with `--skip-deploy` when the operator only wants infra and host reconciliation
 - `instances/scripts/stop.sh` removes the Route53 record and stops the instance.
 - Script-specific behavior is summarized in [`instances/scripts/README.md`](instances/scripts/README.md).
 
@@ -62,7 +63,10 @@ This project is the infrastructure as code management for [Market data notificat
 - The normal operator path runs Ansible through `instances/scripts/start.sh` and `instances/ansible/start.sh`.
 - The current Ansible reconciliation covers:
   - feature-branch Let's Encrypt backup hook setup before TLS reconciliation
-  - nginx and certbot TLS setup, with encrypted backup upload triggered on successful certificate issuance or renewal
+  - persistent journald retention management for the EC2 host
+  - certbot TLS bootstrap and renew-cron reconciliation
+  - nginx config reconciliation, validation, and reload
+  - encrypted backup upload triggered on successful certificate issuance or renewal
 
 ## 5. Validate live changes carefully
 - For the current Let's Encrypt backup work, use the canonical rollout and restore checklist in [`instances/README.md`](instances/README.md).

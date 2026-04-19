@@ -1,0 +1,70 @@
+- hosts: all
+  name: Install SSL for nginx
+  remote_user: "{{ USER }}"
+  gather_facts: no
+  vars_files:
+    - ../vars.yml
+  vars:
+    letsencrypt_backup_enabled: "{{ (LETSENCRYPT_BACKUP_AGE_PUBLIC_KEY | default('', true) | string | trim | length) > 0 }}"
+    certbot_renew_cli: /usr/bin/certbot --quiet renew
+  tasks:
+    - name: Install required packages for SSL
+      become: yes
+      apt:
+        name:
+          - certbot
+          - python3-certbot-nginx
+        state: present
+        update_cache: yes
+
+    - name: Install SSL cert
+      args:
+        executable: /bin/bash
+      register: install_ssl
+      become: yes
+      become_method: su
+      become_user: root
+      become_exe: "sudo su -"
+      async: 600
+      poll: 15
+      loop: "{{ DOMAINS }}"
+      shell: |
+        mkdir -p /etc/letsencrypt/live/{{ item }}
+
+        SSL_CERT_FILE_PATH="/etc/letsencrypt/live/{{ item }}/fullchain.pem"
+        SSL_KEY_FILE_PATH="/etc/letsencrypt/live/{{ item }}/privkey.pem"
+
+        if [ -s "$SSL_CERT_FILE_PATH" ] && [ -s "$SSL_KEY_FILE_PATH" ]
+        then
+          echo "SSL certs already exist for {{ item }}"
+        else
+          # save a backup of nginx config
+          echo "Saving a backup of /etc/nginx/sites-available/{{ DOMAIN }}"
+          cp /etc/nginx/sites-available/{{ DOMAIN }} /etc/nginx/sites-available/{{ DOMAIN }}.bak
+
+          certbot --nginx -d {{ item }} --non-interactive --agree-tos -m {{ ADMIN_EMAIL }}
+
+          sleep 10
+
+          {% if letsencrypt_backup_enabled %}
+          /usr/local/sbin/letsencrypt_backup_to_s3.sh
+          {% endif %}
+
+          {{ certbot_renew_cli }} --dry-run
+        fi
+
+        sudo systemctl force-reload nginx
+    - debug:
+        var: item.stdout_lines
+      loop: "{{ install_ssl.results }}"
+
+    - name: Ensure certbot renew cron job is present
+      become: yes
+      become_method: su
+      become_user: root
+      become_exe: "sudo su -"
+      cron:
+        name: market-data-notification certbot renew
+        minute: "0"
+        hour: "12-23"
+        job: "{{ certbot_renew_cli }}"
