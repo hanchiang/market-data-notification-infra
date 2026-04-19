@@ -102,11 +102,13 @@
 ```bash
 cd instances
 scripts/start.sh <github token> <ssh user> <path to ssh private key>
+scripts/start.sh --skip-deploy <ssh user> <path to ssh private key>
 ```
 
 - `start.sh` is the normal runtime bring-up path.
 - Running it from `instances/` matches the GitHub Actions workflow path.
-- It starts or reuses the EC2 instance, updates Route53, runs Ansible reconciliation, and dispatches backend deployment from the latest successful backend CI SHA on `master`.
+- It starts or reuses the EC2 instance, updates Route53, runs Ansible reconciliation, and by default dispatches backend deployment from the latest successful backend CI SHA on `master`.
+- Use `--skip-deploy` when you want the instance, DNS, and Ansible reconciliation only, without the backend deploy dispatch.
 - For repeat local runs, prefer an ignored local config file at `instances/scripts/start.local.env` using `instances/scripts/start.local.env.example` as the template.
 - Supported config variables are:
   - `ADMIN_EMAIL` required
@@ -116,6 +118,7 @@ scripts/start.sh <github token> <ssh user> <path to ssh private key>
   - `ROUTE53_HOSTED_ZONE_ID` required
   - `LETSENCRYPT_BACKUP_AGE_PUBLIC_KEY` optional, enables the backup hook when set
 - The local script generates temporary `instances/ansible/ansible.cfg`, `aws_ec2.yml`, and `vars.yml` files before Ansible runs, then removes them on exit.
+- A GitHub token is required only for the default deploy-dispatch mode; `--skip-deploy` does not require one.
 - If local Ansible does not have the `amazon.aws` collection, install it with:
 
   ```bash
@@ -133,7 +136,16 @@ scripts/stop.sh
 - The normal operator flow reaches Ansible through `scripts/start.sh`, which calls `../ansible/start.sh`.
 - `ansible/start.sh` currently runs:
   - `playbooks/letsencrypt-backup.yml` on the feature branch when the backup public key is configured
-  - `playbooks/nginx-https.yml`
+  - `playbooks/journald.yml`
+  - `playbooks/tls.yml`
+  - `playbooks/nginx.yml`
+- The journald reconciliation manages a drop-in at `/etc/systemd/journald.conf.d/market-data-notification.conf`.
+- The current managed journald cap is conservative:
+  - `SystemMaxUse=1G`
+  - `SystemKeepFree=1G`
+- On the first reconciliation after that drop-in changes, Ansible rotates and vacuums persistent journals to the managed cap.
+- TLS bootstrap and renew-cron reconciliation now live in `playbooks/tls.yml`.
+- Nginx config reconciliation now lives in `playbooks/nginx.yml`, with managed config files and a single validate-and-reload handler.
 - The backup playbook installs the encrypt-and-upload script, env file, and certbot deploy hook.
 - The actual backup upload is triggered by successful certificate issuance or renewal, not by every start run.
   - first issuance seeds a backup immediately after successful `certbot --nginx`

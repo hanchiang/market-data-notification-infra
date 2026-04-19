@@ -16,9 +16,9 @@ source "$SCRIPT_DIR/helper/ec2-helper.sh"
 source "$SCRIPT_DIR/helper/wait_for_route53_change.sh"
 source "$SCRIPT_DIR/helper/timer.sh"
 
-GITHUB_TOKEN=${1:-}
-SSH_USER=${2:-}
-SSH_PRIVATE_KEY_PATH=${3:-}
+GITHUB_TOKEN=
+SSH_USER=
+SSH_PRIVATE_KEY_PATH=
 DEFAULT_INSTANCE_TAG_NAME=market_data_notification
 ANSIBLE_DIR="$(cd ../ansible && pwd)"
 ANSIBLE_LOCAL_TEMP_DIR=${ANSIBLE_LOCAL_TEMP:-/tmp/ansible-local}
@@ -26,6 +26,7 @@ ANSIBLE_CONFIG_PATH="$ANSIBLE_DIR/ansible.cfg"
 ANSIBLE_INVENTORY_PATH="$ANSIBLE_DIR/aws_ec2.yml"
 ANSIBLE_VARS_PATH="$ANSIBLE_DIR/vars.yml"
 START_ENV_FILE=${START_ENV_FILE:-"$SCRIPT_DIR/start.local.env"}
+SKIP_DEPLOY=false
 
 if [ -f "$START_ENV_FILE" ];
 then
@@ -41,7 +42,12 @@ INSTANCE_TAG_NAME=${INSTANCE_TAG_NAME:-$DEFAULT_INSTANCE_TAG_NAME}
 ROUTE53_HOSTED_ZONE_ID=${ROUTE53_HOSTED_ZONE_ID:-}
 
 usage () {
-    echo "Invalid $1. usage: <path/to/script> <github token> <ssh user> <ssh private key path>"
+    cat >&2 <<'EOF'
+Invalid invocation.
+usage:
+  ./scripts/start.sh <github token> <ssh user> <ssh private key path>
+  ./scripts/start.sh --skip-deploy <ssh user> <ssh private key path>
+EOF
     exit 1
 }
 
@@ -64,19 +70,58 @@ require_env() {
     fi
 }
 
-if [ -z "$GITHUB_TOKEN"  ];
-then
-    usage "github token"
-fi
+parse_args() {
+    while [ $# -gt 0 ]
+    do
+        case "$1" in
+            --skip-deploy)
+                SKIP_DEPLOY=true
+                shift
+                ;;
+            --help|-h)
+                usage
+                ;;
+            --*)
+                echo "Unknown flag: $1" >&2
+                usage
+                ;;
+            *)
+                break
+                ;;
+        esac
+    done
+
+    if [ "$SKIP_DEPLOY" = "true" ]
+    then
+        if [ $# -ne 2 ]
+        then
+            usage
+        fi
+        GITHUB_TOKEN=
+        SSH_USER=$1
+        SSH_PRIVATE_KEY_PATH=$2
+    else
+        if [ $# -ne 3 ]
+        then
+            usage
+        fi
+        GITHUB_TOKEN=$1
+        SSH_USER=$2
+        SSH_PRIVATE_KEY_PATH=$3
+    fi
+}
+
+export ROUTE53_HOSTED_ZONE_ID
+parse_args "$@"
 
 if [ -z "$SSH_USER"  ];
 then
-    usage "ssh user"
+    usage
 fi
 
 if [ -z "$SSH_PRIVATE_KEY_PATH"  ];
 then
-    usage "ssh private key path"
+    usage
 fi
 
 require_cmd ansible-playbook
@@ -86,7 +131,10 @@ require_env AWS_REGION "$AWS_REGION"
 require_env DOMAIN "$DOMAIN"
 require_env ROUTE53_HOSTED_ZONE_ID "$ROUTE53_HOSTED_ZONE_ID"
 
-export ROUTE53_HOSTED_ZONE_ID
+if [ "$SKIP_DEPLOY" != "true" ]
+then
+    require_env GITHUB_TOKEN "$GITHUB_TOKEN"
+fi
 
 mkdir -p "$ANSIBLE_LOCAL_TEMP_DIR"
 
@@ -273,7 +321,14 @@ ANSIBLE_CONFIG="$ANSIBLE_CONFIG_PATH" \
 ANSIBLE_LOCAL_TEMP="$ANSIBLE_LOCAL_TEMP_DIR" \
 ../ansible/start.sh "$SSH_USER" "$SSH_PRIVATE_KEY_PATH"
 
-# Re-run deploy workflow
+# Re-run deploy workflow unless explicitly skipped for host-only start or recovery.
+if [ "$SKIP_DEPLOY" = "true" ]
+then
+    echo "Skipping backend deploy workflow dispatch because --skip-deploy was set"
+    echo "Script completed in $SECONDS seconds"
+    exit 0
+fi
+
 deploy_image_sha=$(get_latest_successful_ci_sha | tail -n 1)
 if [ -z "$deploy_image_sha" ]
 then

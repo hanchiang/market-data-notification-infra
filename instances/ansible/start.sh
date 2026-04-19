@@ -3,7 +3,7 @@
 set -euo pipefail
 
 # Run the host Ansible playbooks in order: install backup prerequisites first,
-# then reconcile nginx and certbot TLS state.
+# then reconcile journald, TLS, and nginx as separate machine-config stages.
 dir=$(dirname "$0")
 cd "$dir"
 
@@ -34,5 +34,11 @@ then
     echo "Warning: Let's Encrypt backup hook setup failed; continuing startup" >&2
 fi
 
-# Configure ssl for nginx
-ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -u "$SSH_USER" -i aws_ec2.yml --private-key "$SSH_PRIVATE_KEY_PATH" playbooks/nginx-https.yml
+# Reconcile journald retention before the rest of the machine-config path.
+ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -u "$SSH_USER" -i aws_ec2.yml --private-key "$SSH_PRIVATE_KEY_PATH" playbooks/journald.yml
+
+# Bootstrap or reuse TLS state before nginx validation and reload.
+ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -u "$SSH_USER" -i aws_ec2.yml --private-key "$SSH_PRIVATE_KEY_PATH" playbooks/tls.yml
+
+# Reconcile nginx config after TLS state is available.
+ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -u "$SSH_USER" -i aws_ec2.yml --private-key "$SSH_PRIVATE_KEY_PATH" playbooks/nginx.yml
