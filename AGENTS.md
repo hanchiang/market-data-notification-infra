@@ -9,6 +9,7 @@ Last verified: 2026-03-22
 ## Repo Role
 - Infrastructure and automation repo for the notification backend on AWS.
 - Covers AMI build, EC2 provisioning, DNS updates, post-provisioning configuration, and start-stop orchestration.
+- The EC2 managed here also hosts `ai-automation` as a second tenant (separate Linux user, separate Postgres database). Before making changes that affect instance sizing, OS packages, Postgres version, or shared system resources, check that the change is safe for both tenants. See [ai-automation ADR 0007](../../AI-AUTOMATION/ai-automation/docs/decisions/0007-vm-deployment-strategy.md) for the tenancy decision and isolation contract.
 
 ## Important Paths
 - `images/image.pkr.hcl`: Packer template for the base image.
