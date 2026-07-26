@@ -13,11 +13,25 @@ terraform {
       version = "~> 4.20.1"
     }
   }
-  required_version = ">= 0.14.5"
+  # The cloud block above exists only from Terraform 1.1.0, so the old
+  # ">= 0.14.5" floor promised a compatibility this file never had.
+  required_version = ">= 1.1.0"
 }
 
 provider "aws" {
   region = var.region
+
+  # Cost attribution. Every resource this workspace manages inherits Project so
+  # Cost Explorer can split the bill per product once the tag key is activated
+  # as a cost allocation tag. Activation is not retroactive, and AWS only offers
+  # a tag key for activation after it has observed it on a live resource, so the
+  # apply must land before the key can be activated. See
+  # docs/runbooks/aws-cost-analysis.md in the workspace repo.
+  default_tags {
+    tags = {
+      Project = var.project_tag
+    }
+  }
 }
 
 data "aws_caller_identity" "current" {}
@@ -224,8 +238,14 @@ resource "aws_instance" "web" {
     volume_size           = 20
     volume_type           = "gp3"
 
+    # Project is repeated here on purpose. The AWS provider does not reliably
+    # propagate provider-level default_tags into root_block_device, and EBS
+    # volume storage is the single largest line on the bill, so an untagged root
+    # volume would leave most of the spend unattributed. Same key and value as
+    # default_tags, so the merged result is identical either way.
     tags = {
-      Name = "market_data_notification"
+      Name    = "market_data_notification"
+      Project = var.project_tag
     }
   }
 
