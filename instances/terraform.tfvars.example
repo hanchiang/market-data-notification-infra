@@ -11,8 +11,11 @@ ssh_user             = "your-ssh-user"
 # the trust policy.
 #
 # There is no default because this repository is public and the consuming
-# repository is private, so a value committed here would publish its name. For
-# Terraform Cloud runs set this as a workspace variable instead -- until it
-# exists there, every plan of this workspace fails with "No value for required
+# repository is private, so a value committed anywhere in this repo would
+# publish its name. Supply it either as a Terraform Cloud workspace variable
+# or as a line in the gitignored terraform.tfvars -- CLI-driven remote runs
+# upload the working directory including gitignored files, so the value still
+# reaches the run (a VCS-driven workspace would not see it). Until set by one
+# route, every plan of this workspace fails with "No value for required
 # variable", including plans for unrelated changes.
 cost_report_github_subjects = ["repo:OWNER/REPO:ref:refs/heads/master"]

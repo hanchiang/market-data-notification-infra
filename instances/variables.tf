@@ -66,7 +66,11 @@ variable "cost_report_github_subjects" {
 
     Deliberately has no default. This repository is public and the consuming
     repository is private, so hardcoding the subject here would publish a
-    private repository name. Set it as a Terraform Cloud workspace variable.
+    private repository name. Supply it as a Terraform Cloud workspace variable,
+    or as a line in the gitignored instances/terraform.tfvars: CLI-driven
+    remote runs upload the working directory including gitignored files, so
+    the value reaches the run without entering git. A VCS-driven workspace
+    builds its configuration from the repo and would not see it.
   EOT
   type        = list(string)
 
