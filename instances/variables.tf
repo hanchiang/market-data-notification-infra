@@ -56,41 +56,6 @@ variable "project_tag" {
   default     = "market-data"
 }
 
-variable "cost_report_github_subjects" {
-  description = <<-EOT
-    GitHub OIDC subjects allowed to assume the cost report reader role, in the
-    form "repo:OWNER/REPO:ref:refs/heads/BRANCH". Just the default branch of
-    the repo holding the cost report workflow: schedule and workflow_dispatch
-    both run only from the default branch, so a branch subject could never be
-    exercised and would only widen the trust policy.
-
-    Deliberately has no default. This repository is public and the consuming
-    repository is private, so hardcoding the subject here would publish a
-    private repository name. Supply it as a Terraform Cloud workspace variable,
-    or as a line in the gitignored instances/terraform.tfvars: CLI-driven
-    remote runs upload the working directory including gitignored files, so
-    the value reaches the run without entering git. A VCS-driven workspace
-    builds its configuration from the repo and would not see it.
-  EOT
-  type        = list(string)
-
-  validation {
-    condition     = length(var.cost_report_github_subjects) > 0
-    error_message = "Provide at least one subject; an empty list would produce a role no workflow can assume."
-  }
-
-  # A blank or malformed entry passes the length check but yields a trust policy
-  # with an unmatchable sub claim: a role nothing can assume, failing at OIDC
-  # exchange time rather than at plan time.
-  validation {
-    condition = alltrue([
-      for subject in var.cost_report_github_subjects :
-      can(regex("^repo:[^/]+/[^:]+:", subject))
-    ])
-    error_message = "Each subject must look like \"repo:OWNER/REPO:ref:refs/heads/BRANCH\"."
-  }
-}
-
 data "aws_ami" "ec2_ami" {
   name_regex  = "^market_data_notification_t4g_small$"
   most_recent = true
