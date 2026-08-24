@@ -33,8 +33,8 @@ Key automation scripts for day-to-day operations.
 
 ### `/.github/workflows`
 Automated workflows triggered via GitHub.
--   `start_market_data_notification.yml`: Automates the startup process.
--   `stop_market_data_notification.yml`: Automates the shutdown process.
+-   `.github/workflows/start_market_data_notification.yml`: Automates the startup process.
+-   `.github/workflows/stop_market_data_notification.yml`: Automates the shutdown process.
 
 ## Operational Workflows
 
