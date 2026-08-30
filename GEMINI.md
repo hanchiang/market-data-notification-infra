@@ -26,7 +26,6 @@ Contains Terraform configurations to provision the live infrastructure.
 
 ### `/instances/scripts`
 Key automation scripts for day-to-day operations.
--   `full_infra_provision.sh`: High-level orchestration (likely a reference or WIP).
 -   `start.sh`: Starts the application/services on the provisioned infrastructure.
 -   `stop.sh`: Stops the application/services and potentially tears down resources to save costs.
 -   `helper/`: Utility scripts (DNS waiting, timers, EC2 helpers).
