@@ -1,17 +1,22 @@
 include /etc/nginx/common/market_data_notification_upstream.conf;
 
+include /etc/nginx/common/json_log.conf;
+
 server {
   listen 80;
   listen [::]:80;
 
   server_name {{ DOMAIN }};
 
+  # Without this the block inherits nginx's default plain `combined` format,
+  # which writes to this same file: 38% of the retained access log was
+  # unparseable as JSON because every http:// request landed there.
+  access_log /var/log/nginx/access.log json_combined;
+
   return 301 https://$host$request_uri;
 }
 
 limit_req_zone $binary_remote_addr zone=market_data_notification_limit:10m rate=3r/s;
-
-include /etc/nginx/common/json_log.conf;
 
 server {
   listen 443 ssl;
