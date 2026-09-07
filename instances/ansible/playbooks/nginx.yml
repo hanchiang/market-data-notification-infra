@@ -79,7 +79,10 @@
       meta: flush_handlers
 
     - name: Probe that an unmatched Host still reaches the 444 catch-all
-      command: "curl -s -o /dev/null -m 5 -H 'Host: 169.254.169.254' http://127.0.0.1/"
+      # Connects locally but claims a Host that can never match a server_name, so
+      # nginx routes it the way it routes a raw-IP scan. .invalid is reserved for
+      # exactly this (RFC 2606). No traffic leaves the box.
+      command: "curl -s -o /dev/null -m 5 -H 'Host: no-such-host.invalid' http://127.0.0.1/"
       register: catch_all_probe
       changed_when: false
       check_mode: false
