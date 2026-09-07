@@ -7,10 +7,15 @@ include /etc/nginx/common/json_log.conf;
 # This is a traffic policy, not a logging fix — the JSON log is kept whole by the
 # playbook removing /etc/nginx/sites-enabled/default, and deleting this block
 # would restore the old 301 behaviour without corrupting anything.
-# Two invariants: it must stay the FIRST :80 block, since with no `default_server`
-# declared anywhere nginx makes the first one the default; and it must NOT declare
-# `default_server`, because then a restored distro default site is a boot failure
-# (duplicate default server) rather than a recoverable logging regression.
+# It must NOT declare `default_server`: that would make a restored distro default
+# site a boot failure (duplicate default server) instead of a degradation, and
+# instances/ansible/start.sh cannot recover from a dead nginx — tls.yml's
+# force-reload fails first and aborts the run before nginx.yml can fix it.
+# The cost of leaving it off is that this block only wins by being the first to
+# declare 0.0.0.0:80 across everything `sites-enabled/*` globs in, sorted by
+# filename, and that choice is made per socket — so a neighbour site file sorting
+# before this one takes over, silently, with `nginx -t` clean. Ordering inside
+# this file does not decide it. The playbook asserts the condition after reload.
 server {
   listen 80;
   listen [::]:80;

@@ -33,10 +33,12 @@
           dest: /etc/nginx/common/favicon_location.conf
       notify: Validate and reload nginx
 
-    # This task is what keeps the access log parseable. The distro default site is
-    # the port-80 default_server and sets no access_log, so every request with a
-    # Host matching no server_name — a raw-IP scan — was logged in nginx's plain
-    # `combined` format into the same file the JSON blocks write to.
+    # Removes the largest single source of non-JSON lines: the distro default site
+    # is the port-80 default_server and sets no access_log, so every request whose
+    # Host matched no server_name — a raw-IP scan — was written in nginx's plain
+    # format into the same file the JSON blocks use. Not sufficient on its own;
+    # the http-level default in the unmanaged nginx.conf is still non-JSON, so any
+    # block arriving without its own access_log reintroduces the defect.
     - name: Disable the distro default nginx site
       become: yes
       file:
@@ -62,6 +64,36 @@
         state: link
         force: true
       notify: Validate and reload nginx
+
+    # The catch-all wins unmatched Hosts only by being the first block to declare
+    # 0.0.0.0:80 across the whole sites-enabled glob, which a neighbour site file
+    # sorting before ours would take over with `nginx -t` still clean. A comment in
+    # the template cannot catch that; this can. Handlers run at end of play, so the
+    # flush is what makes these read the config we just reloaded.
+    - name: Apply pending nginx changes before asserting
+      meta: flush_handlers
+
+    - name: Read the effective nginx config
+      become: yes
+      command: nginx -T
+      register: nginx_effective
+      changed_when: false
+
+    - name: List enabled nginx sites
+      become: yes
+      command: ls /etc/nginx/sites-enabled
+      register: nginx_sites_enabled
+      changed_when: false
+
+    - name: Assert nothing else claims the port-80 default or the enabled-sites dir
+      assert:
+        that:
+          - "'default_server' not in nginx_effective.stdout"
+          - nginx_sites_enabled.stdout_lines | sort == [DOMAIN]
+        fail_msg: >-
+          Unmatched Hosts may no longer reach the 444 catch-all, and may be logged
+          in a non-JSON format. Effective sites-enabled:
+          {{ nginx_sites_enabled.stdout_lines }}.
 
   handlers:
     - name: Validate and reload nginx
