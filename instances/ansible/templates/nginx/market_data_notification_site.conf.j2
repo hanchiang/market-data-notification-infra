@@ -12,10 +12,12 @@ include /etc/nginx/common/json_log.conf;
 # instances/ansible/start.sh cannot recover from a dead nginx — tls.yml's
 # force-reload fails first and aborts the run before nginx.yml can fix it.
 # The cost of leaving it off is that this block only wins by being the first to
-# declare 0.0.0.0:80 across everything `sites-enabled/*` globs in, sorted by
-# filename, and that choice is made per socket — so a neighbour site file sorting
-# before this one takes over, silently, with `nginx -t` clean. Ordering inside
-# this file does not decide it. The playbook asserts the condition after reload.
+# declare 0.0.0.0:80 anywhere in the http context — conf.d and the unmanaged
+# nginx.conf included, and conf.d is included before sites-enabled. Ordering
+# inside this file does not decide it, and the choice is made per socket, so
+# 0.0.0.0:80 and [::]:80 can land on different blocks. A neighbour taking over is
+# silent and leaves `nginx -t` clean, so the playbook probes the behaviour after
+# reload rather than trying to enumerate the files.
 server {
   listen 80;
   listen [::]:80;
@@ -34,8 +36,8 @@ server {
   server_name {{ DOMAIN }};
 
   # Every server block needs this line explicitly: the http-level default in the
-  # unmanaged /etc/nginx/nginx.conf is plain `combined` into this same file, so a
-  # block without it silently corrupts the JSON log. 38% of the log was
+  # unmanaged /etc/nginx/nginx.conf writes a non-JSON format into this same file,
+  # so a block without it silently corrupts the log. 38% of the log was
   # unparseable before 2026-09-07 for exactly this reason.
   access_log /var/log/nginx/access.log json_combined;
 

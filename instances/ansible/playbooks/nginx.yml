@@ -65,35 +65,25 @@
         force: true
       notify: Validate and reload nginx
 
-    # The catch-all wins unmatched Hosts only by being the first block to declare
-    # 0.0.0.0:80 across the whole sites-enabled glob, which a neighbour site file
-    # sorting before ours would take over with `nginx -t` still clean. A comment in
-    # the template cannot catch that; this can. Handlers run at end of play, so the
-    # flush is what makes these read the config we just reloaded.
-    - name: Apply pending nginx changes before asserting
+    # The catch-all declares no default_server, so it wins unmatched Hosts only by
+    # being the first block to declare 0.0.0.0:80 anywhere in the http context —
+    # conf.d and the unmanaged nginx.conf included, and conf.d is included first.
+    # No file listing can prove that, so probe the property instead: an unmatched
+    # Host must reach the catch-all's `return 444`, which closes the connection
+    # with no response and makes curl exit 52. Any other exit means some other
+    # block took the default, costing both the 444 policy and the JSON log format
+    # while `nginx -t` stays clean.
+    # The flush is for ordering, not visibility: it fails the play on a bad config
+    # or a failed reload before this probe reports something confusing.
+    - name: Apply pending nginx changes before probing
       meta: flush_handlers
 
-    - name: Read the effective nginx config
-      become: yes
-      command: nginx -T
-      register: nginx_effective
+    - name: Probe that an unmatched Host still reaches the 444 catch-all
+      command: "curl -s -o /dev/null -m 5 -H 'Host: 169.254.169.254' http://127.0.0.1/"
+      register: catch_all_probe
       changed_when: false
-
-    - name: List enabled nginx sites
-      become: yes
-      command: ls /etc/nginx/sites-enabled
-      register: nginx_sites_enabled
-      changed_when: false
-
-    - name: Assert nothing else claims the port-80 default or the enabled-sites dir
-      assert:
-        that:
-          - "'default_server' not in nginx_effective.stdout"
-          - nginx_sites_enabled.stdout_lines | sort == [DOMAIN]
-        fail_msg: >-
-          Unmatched Hosts may no longer reach the 444 catch-all, and may be logged
-          in a non-JSON format. Effective sites-enabled:
-          {{ nginx_sites_enabled.stdout_lines }}.
+      check_mode: false
+      failed_when: catch_all_probe.rc != 52
 
   handlers:
     - name: Validate and reload nginx
