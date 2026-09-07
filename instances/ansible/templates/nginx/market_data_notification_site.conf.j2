@@ -2,14 +2,18 @@ include /etc/nginx/common/market_data_notification_upstream.conf;
 
 include /etc/nginx/common/json_log.conf;
 
-# Catch-all for a Host that matches no server_name — which is what a raw-IP scan
-# sends. Without it these fall to the distro's default site, which sets no
-# access_log and inherits nginx's plain `combined` into this same file. That was
-# measured: a curl to the instance IP wrote a non-JSON line on 2026-09-07.
-# 444 closes the connection without a response rather than redirecting a scanner.
+# Catches a Host matching no server_name, which is what a raw-IP scan sends.
+# 444 drops the connection instead of redirecting the scanner into the app.
+# This is a traffic policy, not a logging fix — the JSON log is kept whole by the
+# playbook removing /etc/nginx/sites-enabled/default, and deleting this block
+# would restore the old 301 behaviour without corrupting anything.
+# Two invariants: it must stay the FIRST :80 block, since with no `default_server`
+# declared anywhere nginx makes the first one the default; and it must NOT declare
+# `default_server`, because then a restored distro default site is a boot failure
+# (duplicate default server) rather than a recoverable logging regression.
 server {
-  listen 80 default_server;
-  listen [::]:80 default_server;
+  listen 80;
+  listen [::]:80;
 
   server_name _;
 
@@ -24,9 +28,10 @@ server {
 
   server_name {{ DOMAIN }};
 
-  # Without this the block inherits nginx's default plain `combined` format,
-  # which writes to this same file: 38% of the retained access log was
-  # unparseable as JSON because every http:// request landed there.
+  # Every server block needs this line explicitly: the http-level default in the
+  # unmanaged /etc/nginx/nginx.conf is plain `combined` into this same file, so a
+  # block without it silently corrupts the JSON log. 38% of the log was
+  # unparseable before 2026-09-07 for exactly this reason.
   access_log /var/log/nginx/access.log json_combined;
 
   return 301 https://$host$request_uri;

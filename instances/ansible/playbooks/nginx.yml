@@ -33,10 +33,10 @@
           dest: /etc/nginx/common/favicon_location.conf
       notify: Validate and reload nginx
 
-    # Required, not tidiness: the site config below claims `default_server` on
-    # port 80, and nginx refuses to start with two of those. The distro site also
-    # sets no access_log, so it was writing plain `combined` lines into the JSON
-    # access log.
+    # This task is what keeps the access log parseable. The distro default site is
+    # the port-80 default_server and sets no access_log, so every request with a
+    # Host matching no server_name — a raw-IP scan — was logged in nginx's plain
+    # `combined` format into the same file the JSON blocks write to.
     - name: Disable the distro default nginx site
       become: yes
       file:
