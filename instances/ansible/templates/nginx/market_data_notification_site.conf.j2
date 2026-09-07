@@ -2,6 +2,22 @@ include /etc/nginx/common/market_data_notification_upstream.conf;
 
 include /etc/nginx/common/json_log.conf;
 
+# Catch-all for a Host that matches no server_name — which is what a raw-IP scan
+# sends. Without it these fall to the distro's default site, which sets no
+# access_log and inherits nginx's plain `combined` into this same file. That was
+# measured: a curl to the instance IP wrote a non-JSON line on 2026-09-07.
+# 444 closes the connection without a response rather than redirecting a scanner.
+server {
+  listen 80 default_server;
+  listen [::]:80 default_server;
+
+  server_name _;
+
+  access_log /var/log/nginx/access.log json_combined;
+
+  return 444;
+}
+
 server {
   listen 80;
   listen [::]:80;
