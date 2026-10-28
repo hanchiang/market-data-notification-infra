@@ -20,7 +20,7 @@ This project is the infrastructure as code management for [Market data notificat
 - Terraform
 - Ansible for local script-driven reconciliation flows
 - `jq`, `curl`, and `aws` CLI for the helper scripts
-- SSH access to the target EC2 instance
+- SSH access to the target EC2 instance, which runs over AWS Session Manager: the `aws` CLI, the pinned Session Manager plugin, and an SSH entry that pins the host key (workspace runbook `docs/runbooks/ssh-host-key-pinning.md`)
 - GitHub token access when using the default `instances/scripts/start.sh` path, because that script resolves the latest successful backend build and dispatches deployment unless `--skip-deploy` is set
 
 # Operator Workflow
@@ -52,7 +52,8 @@ This project is the infrastructure as code management for [Market data notificat
 - That script:
   - starts the EC2 instance if needed
   - updates Route53
-  - calls `instances/ansible/start.sh`
+  - waits for the Session Manager agent to report Online
+  - calls `instances/ansible/start.sh` over Session Manager, with host-key checking on
   - dispatches the backend deploy workflow using the latest successful backend CI SHA on `master` by default
   - can skip the deploy dispatch with `--skip-deploy` when the operator only wants infra and host reconciliation
 - `instances/scripts/stop.sh` removes the Route53 record and stops the instance.
@@ -62,6 +63,8 @@ This project is the infrastructure as code management for [Market data notificat
 - Ansible is not a standalone day-to-day operator entry point in this repo.
 - The normal operator path runs Ansible through `instances/scripts/start.sh` and `instances/ansible/start.sh`.
 - The current Ansible reconciliation covers:
+  - the Session Manager agent's minimum version
+  - shipping sshd login lines to CloudWatch Logs (`/market-data-notification/sshd`)
   - feature-branch Let's Encrypt backup hook setup before TLS reconciliation
   - persistent journald retention management for the EC2 host
   - certbot TLS bootstrap and renew-cron reconciliation
@@ -77,6 +80,7 @@ This project is the infrastructure as code management for [Market data notificat
 - Packer usage: [`images/README.md`](images/README.md)
 - Terraform backend, state, apply safety, and Let's Encrypt rollout plus restore checklists: [`instances/README.md`](instances/README.md)
 - Start and stop scripts: [`instances/scripts/README.md`](instances/scripts/README.md)
+- Host access (Session Manager, host-key pins, rebuild, break-glass): the workspace runbook `docs/runbooks/ssh-host-key-pinning.md`; the no-port-22 rule and its check: [`AGENTS.md`](AGENTS.md)
 
 # Diagram
 ![Workflow](readme-images/infra-workflow.png)

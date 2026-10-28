@@ -249,17 +249,9 @@ resource "aws_instance" "web" {
     }
   }
 
-  # Wait for EC2 to be ready
-  provisioner "remote-exec" {
-    inline = ["echo 'EC2 is ready'"]
-
-    connection {
-      type        = "ssh"
-      user        = var.ssh_user
-      host        = self.public_ip
-      private_key = file(var.ssh_private_key_path)
-    }
-  }
+  # No remote-exec readiness check: Terraform's connection block has no ProxyCommand,
+  # so it cannot reach sshd once port 22 is closed. Readiness is the agent reporting
+  # Online (scripts/helper/wait_for_ssm_online.sh), run by the rebuild runbook.
 
   tags = {
     Name = "market_data_notification"

@@ -57,3 +57,5 @@ adhoc_scripts/
 observability/grafana
 my_readme.txt
 my_readme.md
+# --- Python (scripts/check_ssh_policy.py and tests/) ---
+__pycache__/

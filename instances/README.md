@@ -13,8 +13,8 @@
 - `jq`
 - `curl`
 - `ansible-playbook` for local reconciliation or debugging
-- the `amazon.aws` Ansible collection for the `aws_ec2` dynamic inventory plugin
-- SSH access to the target instance
+- the Session Manager plugin at the pinned version (`scripts/helper/ensure_session_manager_plugin.sh`)
+- SSH access to the target instance, over Session Manager with the host key pinned (workspace runbook `docs/runbooks/ssh-host-key-pinning.md`)
 
 ## Terraform Backend And State
 - `instances/main.tf` uses the Terraform Cloud backend for the `hansolo` organization and the `market_data_notification` workspace.
@@ -101,8 +101,9 @@
 ## Start Instance
 ```bash
 cd instances
-scripts/start.sh <github token> <ssh user> <path to ssh private key>
-scripts/start.sh --skip-deploy <ssh user> <path to ssh private key>
+export MARKET_DATA_NOTIFICATION_DEPLOY_TOKEN=... SSH_USER=... SSH_PRIVATE_KEY_PATH=... SSH_KNOWN_HOSTS_FILE=...
+scripts/start.sh
+scripts/start.sh --skip-deploy
 ```
 
 - `start.sh` is the normal runtime bring-up path.
@@ -110,20 +111,18 @@ scripts/start.sh --skip-deploy <ssh user> <path to ssh private key>
 - It starts or reuses the EC2 instance, updates Route53, runs Ansible reconciliation, and by default dispatches backend deployment from the latest successful backend CI SHA on `master`.
 - Use `--skip-deploy` when you want the instance, DNS, and Ansible reconciliation only, without the backend deploy dispatch.
 - For repeat local runs, prefer an ignored local config file at `instances/scripts/start.local.env` using `instances/scripts/start.local.env.example` as the template.
+
 - Supported config variables are:
   - `ADMIN_EMAIL` required
   - `AWS_REGION` required
   - `DOMAIN` required
-  - `INSTANCE_TAG_NAME` optional override; defaults to the Terraform-managed EC2 `Name` tag `market_data_notification`
   - `ROUTE53_HOSTED_ZONE_ID` required
   - `LETSENCRYPT_BACKUP_AGE_PUBLIC_KEY` optional, enables the backup hook when set
-- The local script generates temporary `instances/ansible/ansible.cfg`, `aws_ec2.yml`, and `vars.yml` files before Ansible runs, then removes them on exit.
-- A GitHub token is required only for the default deploy-dispatch mode; `--skip-deploy` does not require one.
-- If local Ansible does not have the `amazon.aws` collection, install it with:
+  - `SSH_USER`, `SSH_PRIVATE_KEY_PATH`, `SSH_KNOWN_HOSTS_FILE` required; the known-hosts file pins the host key under `market-data-notification-production`
+  - `MARKET_DATA_NOTIFICATION_DEPLOY_TOKEN` required only for the default deploy-dispatch mode; `--skip-deploy` does not require one
 
-  ```bash
-  ansible-galaxy collection install amazon.aws
-  ```
+- Inputs come from the environment only; any positional argument is refused, because a token in argv shows in the process list.
+- The local script generates temporary `instances/ansible/ansible.cfg` (host-key checking on, SSH persistence on) and `vars.yml`, and a private SSH config for the instance, then removes them on exit. The inventory is the tracked one-host `instances/ansible/inventory.ini`.
 
 ## Stop Instance
 ```bash
@@ -135,10 +134,13 @@ scripts/stop.sh
 ## Ansible Reconciliation
 - The normal operator flow reaches Ansible through `scripts/start.sh`, which calls `../ansible/start.sh`.
 - `ansible/start.sh` currently runs:
+  - `playbooks/ssm-agent.yml`: keeps the Session Manager agent at or above 3.3.4851.0 (CVE-2026-89049)
   - `playbooks/letsencrypt-backup.yml` on the feature branch when the backup public key is configured
   - `playbooks/journald.yml`
   - `playbooks/tls.yml`
   - `playbooks/nginx.yml`
+  - `playbooks/ssh-login-log.yml`: installs the pinned CloudWatch agent and ships sshd login lines to `/market-data-notification/sshd`
+- A failure in `ssm-agent.yml` or `ssh-login-log.yml` does not stop the service coming up; `ansible/start.sh` exits 75 and `scripts/start.sh` fails the run after the deploy dispatch, so the workflow alerts.
 - The journald reconciliation manages a drop-in at `/etc/systemd/journald.conf.d/market-data-notification.conf`.
 - The current managed journald cap is conservative:
   - `SystemMaxUse=1G`
@@ -238,18 +240,17 @@ scripts/stop.sh
    ```
 
    - If you want the helper to unpack the archive into a dedicated local folder, add `--extract-dir /tmp/letsencrypt-restore`.
-3. Copy the decrypted archive to the target host, for example into `/tmp`:
+3. Copy the decrypted archive to the target host, for example into `/tmp`. Use the pinned SSH alias `production` from the workspace runbook `docs/runbooks/ssh-host-key-pinning.md`. The alias carries the Session Manager `ProxyCommand`, the key and the host-key pin, so it does not depend on port 22 being open.
 
    ```bash
-   scp -i <path-to-ssh-private-key> \
-     /path/to/letsencrypt-backup-<timestamp>.tar.gz \
-     <ssh-user>@<host>:/tmp/letsencrypt-backup.tar.gz
+   scp /path/to/letsencrypt-backup-<timestamp>.tar.gz \
+     production:/tmp/letsencrypt-backup.tar.gz
    ```
 
 4. Connect to the target host and make a reversible backup of any existing Let's Encrypt state:
 
    ```bash
-   ssh -i <path-to-ssh-private-key> <ssh-user>@<host>
+   ssh production
    sudo mv /etc/letsencrypt /etc/letsencrypt.before-restore.$(date -u +%Y-%m-%dT%H-%M-%SZ)
    sudo mkdir -p /etc/letsencrypt
    ```

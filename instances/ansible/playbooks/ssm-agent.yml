@@ -1,0 +1,66 @@
+# Keeps the Session Manager agent at or above the release that fixes CVE-2026-89049
+# (AWS bulletin 2026-107-AWS, agent below 3.3.4851.0), and installs it when missing.
+# Idempotent: an agent already at or above the floor is left alone.
+- hosts: all
+  name: Session Manager agent floor
+  remote_user: "{{ USER }}"
+  gather_facts: no
+  vars_files:
+    - ../vars.yml
+  vars:
+    ssm_agent_floor: "3.3.4851.0"
+    ssm_agent_version_cmd: "snap list amazon-ssm-agent --unicode=never | awk 'NR == 2 { print $2 }'"
+  tasks:
+    - name: Check whether the agent snap is installed
+      command: snap list amazon-ssm-agent
+      register: ssm_agent_listed
+      changed_when: false
+      failed_when: false
+
+    # Only reachable over a direct SSH path: a session cannot open through a missing agent.
+    - name: Install the agent snap when it is missing
+      become: yes
+      command: snap install amazon-ssm-agent --classic
+      when: ssm_agent_listed.rc != 0
+
+    - name: Read the agent version
+      shell: "{{ ssm_agent_version_cmd }}"
+      register: ssm_agent_before
+      changed_when: false
+
+    # The refresh restarts the agent this very session may be running through, so it is
+    # started detached (poll 0) and the play reconnects over a fresh session afterwards.
+    - name: Refresh the agent snap when it is below the floor
+      become: yes
+      command: snap refresh amazon-ssm-agent
+      async: 600
+      poll: 0
+      register: ssm_agent_refresh
+      when: ssm_agent_before.stdout is version(ssm_agent_floor, '<')
+
+    - name: Wait for a session to open again after the agent restart
+      wait_for_connection:
+        delay: 15
+        timeout: 300
+      when: ssm_agent_refresh is not skipped
+
+    - name: Wait for the refresh to finish
+      become: yes
+      async_status:
+        jid: "{{ ssm_agent_refresh.ansible_job_id }}"
+      register: ssm_agent_refresh_result
+      until: ssm_agent_refresh_result.finished
+      retries: 40
+      delay: 15
+      when: ssm_agent_refresh is not skipped
+
+    - name: Read the agent version after any refresh
+      shell: "{{ ssm_agent_version_cmd }}"
+      register: ssm_agent_after
+      changed_when: false
+
+    - name: Require the agent at or above the floor
+      assert:
+        that:
+          - ssm_agent_after.stdout is version(ssm_agent_floor, '>=')
+        fail_msg: "amazon-ssm-agent {{ ssm_agent_after.stdout }} is below {{ ssm_agent_floor }} after refresh"

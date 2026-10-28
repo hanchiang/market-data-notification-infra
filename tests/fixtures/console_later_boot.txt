@@ -1,0 +1,4 @@
+SYNTHETIC FIXTURE: a later boot whose console output no longer holds the key block.
+[    0.000000] Booting Linux on physical CPU 0x0000000000 [0x413fd0c1]
+[   10.100000] cloud-init[790]: Cloud-init v. 24.4.1-0ubuntu0~22.04.1 running 'modules:final'
+Ubuntu 22.04.5 LTS ip-10-2-0-99 ttyS0
