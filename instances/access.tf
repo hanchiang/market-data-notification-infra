@@ -241,6 +241,9 @@ resource "aws_iam_role_policy" "infra_start" {
 
 #### Instance side
 
+# aws_iam_role.letsencrypt_backup is the host's only role: an instance takes one, and S3
+# backup was its first job, hence the name. Every host grant attaches to it.
+
 # AWS's minimal agent set for Session Manager without session logging. Not
 # AmazonSSMManagedInstanceCore, which can read every Parameter Store value in the
 # account. The ssmmessages actions take no resource scoping. The agent will log
@@ -300,7 +303,7 @@ resource "aws_iam_role_policy" "ssh_login_log_push" {
 #### Outputs the operator copies into GitHub settings and SSH configs
 
 output "instance_id" {
-  description = "PRODUCTION_INSTANCE_ID variable in both repos, and HostName in each machine's SSH entry"
+  description = "PRODUCTION_INSTANCE_ID variable in the backend repo, and HostName in each machine's SSH entry"
   value       = aws_instance.web.id
 }
 
