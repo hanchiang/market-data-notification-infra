@@ -89,17 +89,14 @@ resource "aws_iam_policy" "host_ssh" {
         }
       },
       {
-        # IAM users: a session id starts with the caller. Which form AWS uses is unverified,
-        # so both are listed; each names only the caller's own sessions. Once one user
-        # session's id is seen (`aws ssm describe-sessions --state History`), delete the
-        # Resource line whose form it does not match.
-        Sid    = "OwnSessionsIamUser"
-        Effect = "Allow"
-        Action = ["ssm:TerminateSession", "ssm:ResumeSession", "ssmmessages:OpenDataChannel"]
-        Resource = [
-          "arn:aws:ssm:*:*:session/$${aws:userid}-*",
-          "arn:aws:ssm:*:*:session/$${aws:username}-*",
-        ]
+        # IAM users: a session id starts with the caller's user name
+        # (market-data-host-ssh-wsl-<suffix>, read 2026-10-28), so this names only the
+        # caller's own sessions. OpenDataChannel stays: plugins since 1.2.764.0 sign that call
+        # with the caller's credentials, and AWS's end-user sample policies grant it.
+        Sid      = "OwnSessionsIamUser"
+        Effect   = "Allow"
+        Action   = ["ssm:TerminateSession", "ssm:ResumeSession", "ssmmessages:OpenDataChannel"]
+        Resource = "arn:aws:ssm:*:*:session/$${aws:username}-*"
       },
       {
         # Assumed roles: the session id starts with the role session name, so AWS's

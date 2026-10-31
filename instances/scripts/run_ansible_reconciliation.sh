@@ -24,7 +24,7 @@ SSH_ALIAS=production
 # SSH connect timeout, seconds. Under a ProxyCommand it bounds the whole Session Manager
 # handshake. Every host consumer uses the same value; raise them together (the workspace
 # runbook's Timeouts list names each one, and a workspace test checks they agree).
-SSH_CONNECT_TIMEOUT_SECONDS=15
+SSH_CONNECT_TIMEOUT_SECONDS=23
 START_ENV_FILE=${START_ENV_FILE:-"$SCRIPT_DIR/start.local.env"}
 
 if [ -f "$START_ENV_FILE" ]
