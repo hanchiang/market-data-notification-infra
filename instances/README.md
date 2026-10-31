@@ -134,13 +134,13 @@ scripts/stop.sh
 ## Ansible Reconciliation
 - The normal operator flow reaches Ansible through `scripts/start.sh`, which calls `../ansible/start.sh`.
 - `ansible/start.sh` currently runs:
-  - `playbooks/ssm-agent.yml`: keeps the Session Manager agent at or above 3.3.4851.0 (CVE-2026-89049)
+  - `playbooks/ssm-agent.yml`: keeps the Session Manager agent at or above 3.3.4851.0 (CVE-2026-89049), from the snap's candidate channel
   - `playbooks/letsencrypt-backup.yml` on the feature branch when the backup public key is configured
   - `playbooks/journald.yml`
   - `playbooks/tls.yml`
   - `playbooks/nginx.yml`
   - `playbooks/ssh-login-log.yml`: installs the pinned CloudWatch agent and ships sshd login lines to `/market-data-notification/sshd`
-- A failure in `ssm-agent.yml` or `ssh-login-log.yml` does not stop the service coming up; `ansible/start.sh` exits 75 and `scripts/start.sh` fails the run after the deploy dispatch, so the workflow alerts.
+- A failure in `ssm-agent.yml` or `ssh-login-log.yml` does not stop the service coming up; `ansible/start.sh` exits 75 and `scripts/start.sh` fails the run after the deploy dispatch, so the workflow alerts. The exception is a host still unreachable when `journald.yml` runs: a runtime playbook failure stops the script before the dispatch.
 - The journald reconciliation manages a drop-in at `/etc/systemd/journald.conf.d/market-data-notification.conf`.
 - The current managed journald cap is conservative:
   - `SystemMaxUse=1G`

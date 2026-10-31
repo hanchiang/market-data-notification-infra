@@ -12,7 +12,7 @@ Run `start.sh` from `instances/` so the local invocation matches the GitHub Acti
 - Writes a private SSH config for the instance: Session Manager `ProxyCommand`, host key pinned under `market-data-notification-production`
 - Calls `../ansible/start.sh` to reconcile host configuration, with host-key checking on
   - Session Manager agent minimum version (`playbooks/ssm-agent.yml`)
-  - SSH login lines shipped to CloudWatch Logs (`playbooks/ssh-login-log.yml`); a failure here or in the agent playbook still dispatches the deploy, then fails the run so it alerts
+  - SSH login lines shipped to CloudWatch Logs (`playbooks/ssh-login-log.yml`); a failure here or in the agent playbook still dispatches the deploy, then fails the run so it alerts. The exception is an agent playbook failure that leaves the host unreachable, which fails the next runtime playbook and stops the dispatch
   - feature-branch Let's Encrypt backup hook setup before TLS reconciliation
   - journald retention reconciliation
   - certbot TLS setup and renew-cron reconciliation
