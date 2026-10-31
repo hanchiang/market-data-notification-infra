@@ -1,0 +1,201 @@
+# Ships sshd's login lines off the host as they are written (Goal 11): the record
+# survives a rebuild, and root on a compromised host cannot erase lines already sent.
+#
+#   sshd -> /var/log/auth.log -> amazon-cloudwatch-agent (as cwagent, sshd[ lines only)
+#        -> CloudWatch Logs /market-data-notification/sshd (90 days, Terraform-owned)
+#
+# The pins come from the 2026-10-28 third-party audit. Its verdict, caveats and the
+# upgrade trigger (move to 1.300074.1 once AWS publishes it) live in the workspace
+# runbook docs/runbooks/ssh-host-key-pinning.md, section "Third-party tool: amazon-cloudwatch-agent".
+- hosts: all
+  name: Ship SSH login lines to CloudWatch Logs
+  remote_user: "{{ USER }}"
+  gather_facts: no
+  vars_files:
+    - ../vars.yml
+  vars:
+    cwa_version: "1.300074.0b1920"
+    cwa_deb_version: "{{ cwa_version }}-1"  # as dpkg reports it: upstream version plus Debian revision
+    cwa_deb_sha256: "2043c89aaf4693c90f9db2a32f45ac250f943a292a1ec0038fc07a07d1095dcd"
+    cwa_key_fingerprint: "937616F3450B7D806CBD9725D58167303B789C72"
+    # Versioned path: AWS's docs print only `latest`, which moves under a pin.
+    cwa_base_url: "https://amazoncloudwatch-agent-us-east-1.s3.us-east-1.amazonaws.com/ubuntu/arm64/{{ cwa_version }}"
+    cwa_config_path: /opt/aws/amazon-cloudwatch-agent/etc/ssh-login-log.json
+    # Logs only: a metrics section would publish billed custom metrics. No
+    # retention_in_days: Terraform owns retention, and setting it here would need
+    # DescribeLogGroups and PutRetentionPolicy, which the instance role does not have.
+    # from_beginning is left at its default (true), so the first start ships the sshd
+    # lines already in the current auth.log (up to a week, a few KB). Kept on purpose:
+    # it puts the days before the push started off the host too.
+    # The filter keeps sudo lines on the host, where a secret on a sudo command line
+    # would otherwise leave it. OpenSSH 9.8+ logs as sshd-session[; Ubuntu 22.04 ships
+    # 8.9, so widen the expression on an OS upgrade.
+    cwa_config:
+      agent:
+        region: us-east-1
+        run_as_user: cwagent
+        usage_data: false
+      logs:
+        logs_collected:
+          files:
+            collect_list:
+              - file_path: /var/log/auth.log
+                log_group_name: /market-data-notification/sshd
+                log_stream_name: "{instance_id}"
+                filters:
+                  - type: include
+                    expression: 'sshd\['
+  tasks:
+    - name: Require rsyslog's auth.log, the file the agent reads
+      stat:
+        path: /var/log/auth.log
+      register: auth_log
+      failed_when: not auth_log.stat.exists
+
+    - name: Read the installed agent package version
+      command: dpkg-query -W -f=${Version} amazon-cloudwatch-agent
+      register: cwa_installed
+      changed_when: false
+      failed_when: false
+
+    - name: Install the pinned agent after verifying its hash and signature
+      when: cwa_installed.stdout != cwa_deb_version
+      become: yes
+      block:
+        - name: Make a work directory
+          tempfile:
+            state: directory
+            suffix: cwagent
+          register: cwa_work
+
+        - name: Copy the vendored signing key
+          copy:
+            src: ../files/amazon-cloudwatch-agent.gpg
+            dest: "{{ cwa_work.path }}/cwa.gpg"
+            mode: "0600"
+
+        - name: Download the pinned package, failing on any other SHA-256
+          get_url:
+            url: "{{ cwa_base_url }}/amazon-cloudwatch-agent.deb"
+            dest: "{{ cwa_work.path }}/cwa.deb"
+            checksum: "sha256:{{ cwa_deb_sha256 }}"
+            mode: "0600"
+
+        - name: Download its signature
+          get_url:
+            url: "{{ cwa_base_url }}/amazon-cloudwatch-agent.deb.sig"
+            dest: "{{ cwa_work.path }}/cwa.deb.sig"
+            mode: "0600"
+
+        # The exact VALIDSIG fingerprint, not gpg's exit code: a good signature from any
+        # other key in the keyring would also exit 0. The SHA-256 pin above also covers
+        # the vendor signature's SHA-1 digest.
+        - name: Verify the signature against the pinned key fingerprint
+          shell: |
+            set -euo pipefail
+            export GNUPGHOME="{{ cwa_work.path }}/gnupg"
+            mkdir -m 700 "$GNUPGHOME"
+            gpg --batch --quiet --import "{{ cwa_work.path }}/cwa.gpg"
+            gpg --batch --status-fd 1 --verify "{{ cwa_work.path }}/cwa.deb.sig" "{{ cwa_work.path }}/cwa.deb" 2>/dev/null
+          args:
+            executable: /bin/bash
+          register: cwa_signature
+          changed_when: false
+          failed_when: ("[GNUPG:] VALIDSIG " ~ cwa_key_fingerprint ~ " ") not in cwa_signature.stdout
+
+        - name: Install the package (creates the cwagent user; does not start the agent)
+          apt:
+            deb: "{{ cwa_work.path }}/cwa.deb"
+          register: cwa_package
+
+      always:
+        - name: Remove the work directory
+          file:
+            path: "{{ cwa_work.path }}"
+            state: absent
+          when: cwa_work.path is defined
+
+    # auth.log is syslog:adm 0640, so adm read is all the agent needs once it drops root.
+    - name: Let cwagent read auth.log through the adm group
+      become: yes
+      user:
+        name: cwagent
+        groups: adm
+        append: yes
+      register: cwa_group
+
+    # With no credentials file or AWS_* variables, the agent uses the instance profile,
+    # whose only log right is the write-only push. A stray credentials file would swap
+    # that for whatever identity it holds.
+    - name: Check no AWS credentials file can override the instance profile
+      become: yes
+      stat:
+        path: "{{ item }}"
+      loop:
+        - /root/.aws
+        - /home/cwagent/.aws
+      register: cwa_aws_dirs
+      failed_when: cwa_aws_dirs.stat.exists
+
+    - name: Install the logs-only agent config
+      become: yes
+      copy:
+        content: "{{ cwa_config | to_nice_json }}\n"
+        dest: "{{ cwa_config_path }}"
+        owner: root
+        group: root
+        mode: "0644"
+      register: cwa_config_file
+
+    - name: Ensure the agent unit drop-in directory exists
+      become: yes
+      file:
+        path: /etc/systemd/system/amazon-cloudwatch-agent.service.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    # Untested starting values from the audit, sized for a 2 GB host that also runs the
+    # backend, Chrome and Redis. Tune after a day's `systemctl show -p MemoryCurrent`.
+    - name: Cap the agent's memory
+      become: yes
+      copy:
+        dest: /etc/systemd/system/amazon-cloudwatch-agent.service.d/limits.conf
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [Service]
+          MemoryMax=256M
+          Environment=GOMEMLIMIT=160MiB
+      register: cwa_limits
+
+    - name: Check whether the agent is running
+      command: systemctl is-active amazon-cloudwatch-agent
+      register: cwa_active
+      changed_when: false
+      failed_when: false
+
+    # -m ec2 skips the Azure and GCE metadata probes; file: keeps the config off SSM.
+    # -s enables and restarts the unit.
+    - name: Load the config and (re)start the agent
+      become: yes
+      shell: |
+        set -euo pipefail
+        systemctl daemon-reload
+        amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:{{ cwa_config_path }} -s
+      args:
+        executable: /bin/bash
+      when: >-
+        (cwa_package is defined and cwa_package is changed)
+        or cwa_group is changed or cwa_config_file is changed
+        or cwa_limits is changed or cwa_active.rc != 0
+
+    - name: Require the agent to run as cwagent, not root
+      shell: ps -o user= -p "$(systemctl show -p MainPID --value amazon-cloudwatch-agent)"
+      register: cwa_user
+      changed_when: false
+      retries: 5
+      delay: 3
+      until: cwa_user.stdout | trim == 'cwagent'

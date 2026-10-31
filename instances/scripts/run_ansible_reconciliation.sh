@@ -3,6 +3,8 @@ set -euo pipefail
 
 # Host-only reconciliation wrapper for the Ansible playbooks used by start.sh.
 # This avoids Route53 updates and backend deploy side effects during restore checks.
+# It reaches the host through the operator's own SSH alias `production` (~/.ssh/config:
+# Session Manager ProxyCommand, host key pinned), so it makes no AWS call of its own.
 if [[ "${BASH_SOURCE[0]}" != "$0" ]]
 then
     echo "Run this script directly, do not source it." >&2
@@ -14,12 +16,15 @@ cd "$SCRIPT_DIR"
 
 SSH_USER=${1:-}
 SSH_PRIVATE_KEY_PATH=${2:-}
-DEFAULT_INSTANCE_TAG_NAME=market_data_notification
 ANSIBLE_DIR="$(cd ../ansible && pwd)"
 ANSIBLE_LOCAL_TEMP_DIR=${ANSIBLE_LOCAL_TEMP:-/tmp/ansible-local}
 ANSIBLE_CONFIG_PATH="$ANSIBLE_DIR/ansible.cfg"
-ANSIBLE_INVENTORY_PATH="$ANSIBLE_DIR/aws_ec2.yml"
 ANSIBLE_VARS_PATH="$ANSIBLE_DIR/vars.yml"
+SSH_ALIAS=production
+# SSH connect timeout, seconds. Under a ProxyCommand it bounds the whole Session Manager
+# handshake. Every host consumer uses the same value; raise them together (the workspace
+# runbook's Timeouts list names each one, and a workspace test checks they agree).
+SSH_CONNECT_TIMEOUT_SECONDS=23
 START_ENV_FILE=${START_ENV_FILE:-"$SCRIPT_DIR/start.local.env"}
 
 if [ -f "$START_ENV_FILE" ]
@@ -28,11 +33,9 @@ then
     source "$START_ENV_FILE"
 fi
 
-AWS_REGION=${AWS_REGION:-}
 DOMAIN=${DOMAIN:-}
 ADMIN_EMAIL=${ADMIN_EMAIL:-}
 LETSENCRYPT_BACKUP_AGE_PUBLIC_KEY=${LETSENCRYPT_BACKUP_AGE_PUBLIC_KEY:-}
-INSTANCE_TAG_NAME=${INSTANCE_TAG_NAME:-$DEFAULT_INSTANCE_TAG_NAME}
 
 usage() {
     echo "usage: <path/to/script> <ssh user> <ssh private key path>" >&2
@@ -64,36 +67,31 @@ then
 fi
 
 require_cmd ansible-playbook
-require_cmd ansible-doc
+require_cmd ssh
 require_env ADMIN_EMAIL "$ADMIN_EMAIL"
-require_env AWS_REGION "$AWS_REGION"
 require_env DOMAIN "$DOMAIN"
+
+# The alias must be the pinned Session Manager entry from the runbook
+# (docs/runbooks/ssh-host-key-pinning.md in the workspace), not a bare hostname.
+ssh_settings=$(ssh -G "$SSH_ALIAS")
+if ! grep -qx 'stricthostkeychecking true' <<< "$ssh_settings" \
+    || ! grep -q '^hostkeyalias market-data-notification-production$' <<< "$ssh_settings"
+then
+    echo "SSH config entry '$SSH_ALIAS' must set StrictHostKeyChecking yes and HostKeyAlias market-data-notification-production" >&2
+    exit 1
+fi
 
 mkdir -p "$ANSIBLE_LOCAL_TEMP_DIR"
 
 cat << EOF > "$ANSIBLE_CONFIG_PATH"
-[inventory]
-enable_plugins = host_list, script, auto, yaml, ini, toml, amazon.aws.aws_ec2
-
 [defaults]
-host_key_checking = False
+host_key_checking = True
 local_tmp = $ANSIBLE_LOCAL_TEMP_DIR
-EOF
+# Ansible passes this to ssh as ConnectTimeout; its default is 10.
+timeout = $SSH_CONNECT_TIMEOUT_SECONDS
 
-if ! ANSIBLE_CONFIG="$ANSIBLE_CONFIG_PATH" ANSIBLE_LOCAL_TEMP="$ANSIBLE_LOCAL_TEMP_DIR" ansible-doc -t inventory -l 2>/dev/null | grep -Eq '^amazon\.aws\.aws_ec2([[:space:]]|$)'
-then
-    echo "Missing Ansible inventory plugin amazon.aws.aws_ec2. Install it with: ansible-galaxy collection install amazon.aws" >&2
-    exit 1
-fi
-
-cat << EOF > "$ANSIBLE_INVENTORY_PATH"
-plugin: amazon.aws.aws_ec2
-hostvars_prefix: aws_
-regions:
-  - $AWS_REGION
-include_filters:
-  - tag:Name:
-      - $INSTANCE_TAG_NAME
+[ssh_connection]
+ssh_args = -o ControlMaster=auto -o ControlPersist=60s
 EOF
 
 cat << EOF > "$ANSIBLE_VARS_PATH"
@@ -107,11 +105,12 @@ LETSENCRYPT_BACKUP_AGE_PUBLIC_KEY: "$LETSENCRYPT_BACKUP_AGE_PUBLIC_KEY"
 EOF
 
 cleanup_ansible_inputs() {
-    rm -f "$ANSIBLE_CONFIG_PATH" "$ANSIBLE_INVENTORY_PATH" "$ANSIBLE_VARS_PATH"
+    rm -f "$ANSIBLE_CONFIG_PATH" "$ANSIBLE_VARS_PATH"
 }
 
 trap cleanup_ansible_inputs EXIT
 
+# Exit 75 from ansible/start.sh (a security playbook failed) is passed through as failure.
 ANSIBLE_CONFIG="$ANSIBLE_CONFIG_PATH" \
 ANSIBLE_LOCAL_TEMP="$ANSIBLE_LOCAL_TEMP_DIR" \
 ../ansible/start.sh "$SSH_USER" "$SSH_PRIVATE_KEY_PATH"

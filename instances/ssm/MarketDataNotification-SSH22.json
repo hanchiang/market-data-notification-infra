@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "1.0",
+  "description": "SSH to this host's sshd on port 22 only. The port is fixed and the document takes no parameters.",
+  "sessionType": "Port",
+  "properties": {
+    "portNumber": "22"
+  }
+}

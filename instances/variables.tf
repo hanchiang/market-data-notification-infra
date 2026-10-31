@@ -23,19 +23,14 @@ variable "ec2_az" {
   default     = "us-east-1a"
 }
 
-variable "ssh_private_key_path" {
-  description = "Private SSH key for EC2"
-  type        = string
-  sensitive   = true
-}
-
 variable "ssh_public_key_path" {
   description = "Public SSH key for EC2"
   type        = string
 }
 
-variable "ssh_user" {
-  type = string
+variable "route53_hosted_zone_id" {
+  description = "Hosted zone holding the service record; scopes the start role's Route53 rights. Same value as the ROUTE53_HOSTED_ZONE_ID GitHub variable."
+  type        = string
 }
 
 variable "project_tag" {

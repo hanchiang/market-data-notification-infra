@@ -1,6 +1,6 @@
 # market-data-notification-infra Agent Guide
 
-Last verified: 2026-03-22
+Last verified: 2026-10-28
 
 ## Scope
 - Applies to `market-data-notification-infra/` unless a deeper `AGENTS.md` overrides it.
@@ -19,12 +19,15 @@ Last verified: 2026-03-22
 - `instances/ansible/`: post-provisioning configuration.
 - `instances/scripts/start.sh`: start sequence for EC2, Route53, Ansible, and deployment dispatch.
 - `instances/scripts/stop.sh`: shutdown sequence.
+- `instances/access.tf`: Session Manager callers, the fixed-port session document, the agent's grant, and the SSH login-line log group.
+- `scripts/check_ssh_policy.py`, `tests/`: the SSH policy check and the scripts' tests (`python3 -m unittest discover -s tests`).
 
 ## Repo-Specific Rules
 - Treat this repo as high-blast-radius. Prefer read, format, and validate actions over live execution.
 - Separate structural cleanup from operational changes whenever possible. The shell scripts currently combine several responsibilities in a single flow.
 - Do not run AWS, Route53, or GitHub Actions dispatch commands unless the user explicitly wants live operations.
 - Preserve idempotency when editing shell scripts, Ansible, Packer, or Terraform.
+- **No public SSH, and every SSH path pinned.** Every tracked ssh, scp and Ansible path reaches the host over AWS Session Manager (`instances/access.tf`) and checks the host key against the pin filed under `market-data-notification-production`; the target state has no other way in. Never add a security-group ingress that admits port 22 from an address range, never turn host-key checking off or to accept-new, and never trust a key read off the network. `.github/workflows/ssh-policy.yml` runs `scripts/check_ssh_policy.py` on every push and fails on any of these. Transitional: until the phase 2 commit removes it, `instances/main.tf` keeps its port 22 ingress, tolerated only by the workflow's `--allow-public-ssh` flag; that commit deletes the ingress block, the flag, and the health job's `--allow-terraform-public-22` together. The check enforces it: the allowance fails once its resource has no port 22 ingress or more than one, and any tracked file still naming the health flag fails once the allowance is gone. A break-glass rule is made out of band, never committed. How to reach the host, re-pin after a rebuild, and break glass: the workspace runbook `docs/runbooks/ssh-host-key-pinning.md`.
 
 ## Validation
 - Packer formatting: `packer fmt -check images/image.pkr.hcl`

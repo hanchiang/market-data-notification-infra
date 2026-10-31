@@ -53,7 +53,7 @@ terraform apply
 ### 3. Start Application
 Use the helper script which sets up the environment and triggers the startup sequence:
 ```bash
-./instances/scripts/start.sh <github_token> <ssh_user> <path_to_private_key>
+MARKET_DATA_NOTIFICATION_DEPLOY_TOKEN=... SSH_USER=... SSH_PRIVATE_KEY_PATH=... SSH_KNOWN_HOSTS_FILE=... ./instances/scripts/start.sh
 ```
 
 ### 4. Stop Application

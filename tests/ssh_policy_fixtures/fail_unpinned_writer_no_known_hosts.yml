@@ -1,0 +1,8 @@
+steps:
+  - name: Configure SSH
+    run: |
+      cat << EOF > ~/.ssh/config
+      Host production
+        HostName i-0123456789abcdef0
+        StrictHostKeyChecking yes
+      EOF

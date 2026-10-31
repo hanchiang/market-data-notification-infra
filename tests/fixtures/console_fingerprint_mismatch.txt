@@ -1,0 +1,21 @@
+SYNTHETIC FIXTURE: the fingerprint block disagrees with the ed25519 key printed below it.
+[    0.000000] Booting Linux on physical CPU 0x0000000000 [0x413fd0c1]
+[   11.204511] cloud-init[812]: Cloud-init v. 24.4.1-0ubuntu0~22.04.1 running 'init' at Wed, 28 Oct 2026 02:10:11 +0000.
+[   12.900001] cloud-init[812]: Generating public/private ed25519 key pair.
+<14>Oct 28 02:10:14 ec2: 
+<14>Oct 28 02:10:14 ec2: #############################################################
+<14>Oct 28 02:10:14 ec2: -----BEGIN SSH HOST KEY FINGERPRINTS-----
+<14>Oct 28 02:10:14 ec2: 256 SHA256:ErddObZzvuqrxI7N92+aGkZnsSxPF77yuxNHj4xv5D8 root@ip-10-2-0-99 (ECDSA)
+<14>Oct 28 02:10:14 ec2: 256 SHA256:Qky5F26Asz+hm4M+UTBbfSfgJt05OIslp5IGZsPw1Ns root@ip-10-2-0-99 (ED25519)
+<14>Oct 28 02:10:14 ec2: 3072 SHA256:Bgze5Wir5nELUEHpC3+38Vs0rvjvkOYsWPxa8UCEnaQ root@ip-10-2-0-99 (RSA)
+<14>Oct 28 02:10:14 ec2: -----END SSH HOST KEY FINGERPRINTS-----
+<14>Oct 28 02:10:14 ec2: #############################################################
+-----BEGIN SSH HOST KEY KEYS-----
+ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBA0ZY+PJ3lB27eX5NPyZzIlV1L5pFYVLGLe+hdLSB2I9sSlRnOXvtrDEtFUlOtoj69eD+wAXsn+hsUbu1DoNq4Y= root@ip-10-2-0-99
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGQEefJ+1LCMqYlb2hNWvVPb89dMIx9Tpk7FdlaIN5kp root@ip-10-2-0-99
+ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDK6g6I5vEAq8AOGIx4jwfx2WFbSJ81oSB95B8oyr2SqVkhD1WMJfsrArLUQQCisVNI1nwpJ8jRzKsmzn4VixwqZlMjNCziB0PXfBbsSX51EQql4oFS5M6ScA5YcIihe1zOLBYqCH3O5xXmGd/+5N04Zdy0FHNpIYrpU3hyh4ISHIMZp2Y7D+OmhjAthOhtrrXbJMlz9sMYCqcizpxwZHuUSfy4vSGQoJ/JVdidoNJArz1JmYnhYSJE9+fBy1vn5NEPmsxYP+ieEpzfF/Uau/vxGDjNLfQ1PYSy/ZhZlMIyXtyGu/09T8xC2y5AWH0bv66bTaxwn1cUL7MbfG68ThIObddfy2lvWiIAbh2X002EuheQhdbJoLcCe4DQs8MZNpfV6i50pEqlqFZ/Z0KYFsjTEn+EXX5lAYvkF3WcO4Ao02OQjuVxYW7qY98aABll98fgmzd3+AaQ0ncpIdXeKHKZZEBZmDXsCQfpd32lKx25yTEUJuSEAQRoIRJpH+DrYTs= root@ip-10-2-0-99
+ssh-dss AAAAB3NzaC1kc3MAAACBAO+nomtzr3GAJr5xBL+ENs8+s+rWaaWXlcVybatg7J+M4eQF6QKOJnr6YNlrcyHSAoM/7NhaMT/TtjNZi8v4EHzGSKFmB03rL4NQg0gReGN2Hk9o349xYNK/De3SbLf+WCzWwy9boAVAApBIiK81CfpVgCWlQjY5mEZttKUuRoEzAAAAFQCNu3curuN0xmQ1y8KN8rZCUH1bRwAAAIBnFPURVEkevh9O9IPcc65EexrO1A/iYF5MgjXFjTtTGJYhv5Mg3F6Gjb7PMpRAWnpvaeNS/vjWVUSXtZ8GjJvBLu4KRMdz6qvVCtDDATGz5GJXyZpC8kp6GkZ6gOrujngX32mvTLPXxboBLpvK4p1LnSRmQw27kw2sIBUXvr/yaQAAAIB+V6sMe/yModxk2vN+fy7vuAWXQXvZUpewTFiPBv0rBjsk1X3CB+FGOS64l/5dNdIE8XJRIWrFTU76XJA0pgy318F7tBc5t+NzoWJcOpt1VqtNGcLAL7dcAnqEGuefF4j0fnSbLYE+i8MbfIfe0hogPmYbY2e5WYzKRTz0Wq6atQ== root@ip-10-2-0-99
+-----END SSH HOST KEY KEYS-----
+[   14.512003] cloud-init[1101]: Cloud-init v. 24.4.1-0ubuntu0~22.04.1 finished at Wed, 28 Oct 2026 02:10:14 +0000. Up 14.49 seconds
+
+Ubuntu 22.04.5 LTS ip-10-2-0-99 ttyS0

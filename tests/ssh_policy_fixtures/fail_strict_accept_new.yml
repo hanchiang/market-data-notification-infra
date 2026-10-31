@@ -1,0 +1,3 @@
+steps:
+  - name: Deploy
+    run: ssh -o "StrictHostKeyChecking accept-new" production true
