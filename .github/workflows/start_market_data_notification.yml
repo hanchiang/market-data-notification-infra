@@ -229,8 +229,11 @@ jobs:
         run: bash instances/scripts/check_host_access_health.sh --allow-terraform-public-22
   notify_unsuccessful:
     runs-on: ubuntu-latest
-    needs: [start_ec2_and_deploy]
-    if: ${{ needs.start_ec2_and_deploy.result == 'failure' }}
+    # The two checks are here because their failure leaves the start job skipped, not failed.
+    needs: [check_timezone, health_check, start_ec2_and_deploy]
+    # always(): without a status function GitHub adds success(), which skips this job on the
+    # very failure it reports.
+    if: ${{ always() && contains(needs.*.result, 'failure') }}
     steps:
       - name: Send telegram notification unsuccessful run
         env:
@@ -238,7 +241,7 @@ jobs:
           STOCKS_TELEGRAM_DEV_ID: ${{ secrets.STOCKS_TELEGRAM_DEV_ID }}
         run: |
           now=$(TZ=$TZ date +%Y-%m-%dT%H:%M:%S%z)
-          text=$(echo "\[Github action\] Market data notification infra: Failed to start EC2 and deploy Market data notification at $now. Workflow: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" | sed 's~[[:blank:]]~%20~g')
+          text=$(echo "\[Github action\] Market data notification infra: Start run failed at $now. The deploy may not have been dispatched, check healthz. Workflow: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" | sed 's~[[:blank:]]~%20~g')
           curl "https://api.telegram.org/bot${STOCKS_TELEGRAM_DEV_BOT_TOKEN}/sendMessage?chat_id=${STOCKS_TELEGRAM_DEV_ID}&text=$text"
   notify_successful:
     runs-on: ubuntu-latest

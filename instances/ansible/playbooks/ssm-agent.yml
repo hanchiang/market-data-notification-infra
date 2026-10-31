@@ -1,6 +1,9 @@
 # Keeps the Session Manager agent at or above the release that fixes CVE-2026-89049
 # (AWS bulletin 2026-107-AWS, agent below 3.3.4851.0), and installs it when missing.
 # Idempotent: an agent already at or above the floor is left alone.
+#
+# Candidate, because AWS publishes agent fixes there; stable sat at 3.3.4793.0, below this
+# floor, on 2026-10-31. The refresh also moves the snap to this channel for later refreshes.
 - hosts: all
   name: Session Manager agent floor
   remote_user: "{{ USER }}"
@@ -9,6 +12,7 @@
     - ../vars.yml
   vars:
     ssm_agent_floor: "3.3.4851.0"
+    ssm_agent_channel: latest/candidate
     ssm_agent_version_cmd: "snap list amazon-ssm-agent --unicode=never | awk 'NR == 2 { print $2 }'"
   tasks:
     - name: Check whether the agent snap is installed
@@ -20,7 +24,7 @@
     # Only reachable over a direct SSH path: a session cannot open through a missing agent.
     - name: Install the agent snap when it is missing
       become: yes
-      command: snap install amazon-ssm-agent --classic
+      command: "snap install amazon-ssm-agent --classic --channel={{ ssm_agent_channel }}"
       when: ssm_agent_listed.rc != 0
 
     - name: Read the agent version
@@ -29,23 +33,29 @@
       changed_when: false
 
     # The refresh restarts the agent this very session may be running through, so it is
-    # started detached (poll 0) and the play reconnects over a fresh session afterwards.
+    # started detached (poll 0). The next task opens a new session 15 seconds later; the
+    # restart can come before or after that. Polling then allows 40 x 15 s for the refresh.
     - name: Refresh the agent snap when it is below the floor
       become: yes
-      command: snap refresh amazon-ssm-agent
+      command: "snap refresh amazon-ssm-agent --channel={{ ssm_agent_channel }}"
       async: 600
       poll: 0
       register: ssm_agent_refresh
       when: ssm_agent_before.stdout is version(ssm_agent_floor, '<')
 
-    - name: Wait for a session to open again after the agent restart
+    - name: Open a new session after the refresh starts
       wait_for_connection:
         delay: 15
         timeout: 300
       when: ssm_agent_refresh is not skipped
 
+    # The agent restart can land here, and `until` does not retry an unreachable host. SSH
+    # retries (about 3 minutes of backoff) carry this task and the next across it. Only
+    # these two: on the tasks above they would slow every failure, a wrong host key included.
     - name: Wait for the refresh to finish
       become: yes
+      vars:
+        ansible_ssh_retries: 10
       async_status:
         jid: "{{ ssm_agent_refresh.ansible_job_id }}"
       register: ssm_agent_refresh_result
@@ -55,6 +65,8 @@
       when: ssm_agent_refresh is not skipped
 
     - name: Read the agent version after any refresh
+      vars:
+        ansible_ssh_retries: 10
       shell: "{{ ssm_agent_version_cmd }}"
       register: ssm_agent_after
       changed_when: false

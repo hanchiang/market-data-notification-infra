@@ -162,8 +162,11 @@ jobs:
         run: rm -rf ~/.aws
   notify_unsuccesful_run:
     runs-on: ubuntu-latest
-    needs: [stop_ec2]
-    if: ${{ needs.stop_ec2.result == 'failure' }}
+    # The two checks are here because their failure leaves the stop job skipped, not failed.
+    needs: [check_timezone, health_check, stop_ec2]
+    # always(): without a status function GitHub adds success(), which skips this job on the
+    # very failure it reports.
+    if: ${{ always() && contains(needs.*.result, 'failure') }}
     steps:
       - name: Send telegram notification unsuccessful run
         env:
