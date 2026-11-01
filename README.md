@@ -80,7 +80,7 @@ This project is the infrastructure as code management for [Market data notificat
 - Packer usage: [`images/README.md`](images/README.md)
 - Terraform backend, state, apply safety, and Let's Encrypt rollout plus restore checklists: [`instances/README.md`](instances/README.md)
 - Start and stop scripts: [`instances/scripts/README.md`](instances/scripts/README.md)
-- Host access (Session Manager, host-key pins, rebuild, break-glass): the workspace runbook `docs/runbooks/ssh-host-key-pinning.md`; the no-port-22 rule and its check: [`AGENTS.md`](AGENTS.md)
+- Host access (Session Manager, host-key pins, rebuild): the workspace runbook `docs/runbooks/ssh-host-key-pinning.md`; failures and break-glass: `docs/runbooks/ssh-access-failures.md`; the no-port-22 rule and its check: [`AGENTS.md`](AGENTS.md)
 
 # Diagram
 ![Workflow](readme-images/infra-workflow.png)
