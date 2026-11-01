@@ -14,8 +14,5 @@ jobs:
       # scripts' own tests.
       - name: Check tests and fixtures
         run: python3 -m unittest discover -s tests -v
-      # --allow-public-ssh is phase 1 only: main.tf keeps its port 22 ingress until phase 2,
-      # and the commit that removes that ingress block deletes this flag. The checker fails
-      # once the named resource has no port 22 ingress, so the flag cannot outlive it.
       - name: Check every tracked file
-        run: python3 scripts/check_ssh_policy.py --allow-public-ssh instances/main.tf:aws_security_group.sg_22_80_443
+        run: python3 scripts/check_ssh_policy.py
