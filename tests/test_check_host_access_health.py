@@ -21,7 +21,7 @@ def tcp(port, cidr, description=None):
 
 
 WEB = [tcp(80, '0.0.0.0/0'), tcp(443, '0.0.0.0/0')]
-TERRAFORM_22 = tcp(22, '0.0.0.0/0')
+PUBLIC_22 = tcp(22, '0.0.0.0/0')
 BREAK_GLASS_22 = tcp(22, '203.0.113.0/24', 'break-glass 2026-10-28T09:00Z')
 EVENTS = {'Label': 'IncomingLogEvents', 'Datapoints': [{'Sum': 7.0, 'Unit': 'None'}]}
 SILENT = {'Label': 'IncomingLogEvents', 'Datapoints': []}
@@ -62,19 +62,28 @@ esac''')
         self.assertEqual(self.fake.calls('curl'), [])
 
     def test_any_port_22_rule_alerts(self):
-        for rule in (TERRAFORM_22, BREAK_GLASS_22, {'IpProtocol': '-1', 'IpRanges': [{'CidrIp': '0.0.0.0/0'}]},
-                     {'IpProtocol': 'tcp', 'FromPort': 0, 'ToPort': 1024, 'Ipv6Ranges': [{'CidrIpv6': '::/0'}]}):
+        for rule in (PUBLIC_22, BREAK_GLASS_22, {'IpProtocol': '-1', 'IpRanges': [{'CidrIp': '0.0.0.0/0'}]},
+                     {'IpProtocol': 'tcp', 'FromPort': 0, 'ToPort': 1024, 'Ipv6Ranges': [{'CidrIpv6': '::/0'}]},
+                     {'IpProtocol': 'tcp', 'FromPort': 22, 'ToPort': 22, 'PrefixListIds': [{'PrefixListId': 'pl-1'}]},
+                     {'IpProtocol': 'tcp', 'FromPort': 22, 'ToPort': 22, 'UserIdGroupPairs': [{'GroupId': 'sg-1'}]},
+                     {'IpProtocol': '6', 'FromPort': 22, 'ToPort': 22, 'IpRanges': [{'CidrIp': '0.0.0.0/0'}]}):
             with self.subTest(rule=rule):
                 self.fake.log.unlink(missing_ok=True)
                 result = self.check(group(*WEB, rule), EVENTS)
                 self.assertEqual(result.returncode, 1)
                 self.assertIn('port 22 is open on sg_22_80_443 to 1 source(s)', self.alert_text())
 
-    def test_the_phase_1_allowance_tolerates_only_the_terraform_rule(self):
-        self.assertEqual(self.check(group(*WEB, TERRAFORM_22), EVENTS, '--allow-terraform-public-22').returncode, 0)
-        result = self.check(group(*WEB, TERRAFORM_22, BREAK_GLASS_22), EVENTS, '--allow-terraform-public-22')
+    def test_each_source_on_a_port_22_rule_counts(self):
+        rule = {'IpProtocol': 'tcp', 'FromPort': 22, 'ToPort': 22, 'IpRanges': [{'CidrIp': '0.0.0.0/0'}],
+                'Ipv6Ranges': [{'CidrIpv6': '::/0'}], 'PrefixListIds': [{'PrefixListId': 'pl-1'}],
+                'UserIdGroupPairs': [{'GroupId': 'sg-1'}]}
+        result = self.check(group(*WEB, rule), EVENTS)
         self.assertEqual(result.returncode, 1)
-        self.assertIn('to 1 source(s)', self.alert_text())
+        self.assertIn('to 4 source(s)', self.alert_text())
+
+    def test_any_argument_is_refused(self):
+        self.assertEqual(self.check(group(*WEB), EVENTS, '--anything').returncode, 2)
+        self.assertEqual(self.fake.calls('curl'), [])
 
     def test_a_missing_security_group_alerts(self):
         result = self.check({'SecurityGroups': []}, EVENTS)

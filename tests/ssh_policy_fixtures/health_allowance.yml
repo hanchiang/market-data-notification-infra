@@ -1,4 +1,0 @@
-jobs:
-  check_host_access_health:
-    steps:
-      - run: bash instances/scripts/check_host_access_health.sh --allow-terraform-public-22

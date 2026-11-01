@@ -1,8 +1,6 @@
-"""The SSH policy check fails on each fixture pattern, passes the clean fixtures, and
-holds its phase 1 allowance to exactly one resource."""
+"""The SSH policy check fails on each fixture pattern and passes the clean fixtures."""
 import subprocess
 import sys
-import tempfile
 import unittest
 from pathlib import Path
 
@@ -53,64 +51,11 @@ class FixtureTest(unittest.TestCase):
                 result = check(f'{FIXTURES}/{name}')
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
-    def test_the_repo_scan_skips_the_fixtures_and_itself(self):
-        result = check('--allow-public-ssh', 'instances/main.tf:aws_security_group.sg_22_80_443')
+    def test_the_repo_scan_is_clean_and_skips_the_fixtures_and_itself(self):
+        result = check()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertNotIn(FIXTURES, result.stdout)
         self.assertNotIn('scripts/check_ssh_policy.py', result.stdout)
-
-
-class AllowanceTest(unittest.TestCase):
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.root = Path(self.tmp.name)
-        fixtures = REPO / FIXTURES
-        (self.root / 'main.tf').write_text((fixtures / 'fail_inline_ingress.tf').read_text())
-        (self.root / 'rule.tf').write_text((fixtures / 'fail_security_group_rule.tf').read_text())
-        (self.root / 'ansible.cfg').write_text((fixtures / 'fail_ansible_cfg.cfg').read_text())
-
-    def tearDown(self):
-        self.tmp.cleanup()
-
-    def test_the_allowance_suppresses_only_the_named_resource(self):
-        result = check('--allow-public-ssh', 'main.tf:aws_security_group.web', 'main.tf', 'rule.tf', cwd=self.root)
-        self.assertEqual(result.returncode, 1)
-        self.assertNotIn('main.tf:4: public-ssh', result.stdout)
-        self.assertIn('allowed for phase 1 only: main.tf:aws_security_group.web', result.stdout)
-        self.assertIn('rule.tf:1: public-ssh', result.stdout)
-
-    def test_the_allowance_never_covers_another_rule(self):
-        result = check('--allow-public-ssh', 'ansible.cfg:aws_security_group.web', 'ansible.cfg', cwd=self.root)
-        self.assertEqual(result.returncode, 1)
-        self.assertIn('ansible.cfg:2: ansible-host-key-checking-off', result.stdout)
-
-    def test_a_stale_allowance_fails(self):
-        (self.root / 'main.tf').write_text('resource "aws_security_group" "web" {\n}\n')
-        result = check('--allow-public-ssh', 'main.tf:aws_security_group.web', 'main.tf', cwd=self.root)
-        self.assertEqual(result.returncode, 1)
-        self.assertIn('main.tf:1: stale-allowance: aws_security_group.web has no port 22 ingress', result.stdout)
-
-    def test_the_allowance_fails_when_its_resource_gains_a_second_port_22_ingress(self):
-        result = check('--allow-public-ssh', f'{FIXTURES}/allow_two_ingress.tf:aws_security_group.web',
-                       f'{FIXTURES}/allow_two_ingress.tf')
-        self.assertEqual(result.returncode, 1)
-        self.assertIn(f'{FIXTURES}/allow_two_ingress.tf:1: allowance-too-wide: aws_security_group.web has 2 port 22 ingresses',
-                      result.stdout)
-        self.assertIn(f'{FIXTURES}/allow_two_ingress.tf:4: public-ssh', result.stdout)
-
-    def test_the_health_allowance_expires_with_the_policy_allowance(self):
-        fixture = f'{FIXTURES}/health_allowance.yml'
-        result = check(fixture)
-        self.assertEqual(result.returncode, 1)
-        self.assertIn(f'{fixture}:4: stale-health-allowance', result.stdout)
-        with_policy_allowance = check('--allow-public-ssh', f'{FIXTURES}/fail_inline_ingress.tf:aws_security_group.web',
-                                      f'{FIXTURES}/fail_inline_ingress.tf', fixture)
-        self.assertEqual(with_policy_allowance.returncode, 0, with_policy_allowance.stdout)
-
-    def test_only_one_allowance_is_accepted(self):
-        result = check('--allow-public-ssh', 'main.tf:aws_security_group.web',
-                       '--allow-public-ssh', 'rule.tf:aws_security_group_rule.home', 'main.tf', cwd=self.root)
-        self.assertEqual(result.returncode, 2)
-        self.assertIn('one resource only', result.stderr)
 
 
 if __name__ == '__main__':

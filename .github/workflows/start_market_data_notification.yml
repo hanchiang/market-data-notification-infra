@@ -224,9 +224,7 @@ jobs:
         env:
           STOCKS_TELEGRAM_DEV_BOT_TOKEN: ${{ secrets.STOCKS_TELEGRAM_DEV_BOT_TOKEN }}
           STOCKS_TELEGRAM_DEV_ID: ${{ secrets.STOCKS_TELEGRAM_DEV_ID }}
-        # Phase 1 only: the flag tolerates main.tf's own port 22 rule. The phase 2 commit
-        # that removes that ingress block deletes this flag too.
-        run: bash instances/scripts/check_host_access_health.sh --allow-terraform-public-22
+        run: bash instances/scripts/check_host_access_health.sh
   notify_unsuccessful:
     runs-on: ubuntu-latest
     # The two checks are here because their failure leaves the start job skipped, not failed.

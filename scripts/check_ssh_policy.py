@@ -5,21 +5,10 @@ The condition protected: no security group admits port 22 from an address range,
 every ssh, scp and Ansible path that reaches the host is strict against a pinned key.
 Run by .github/workflows/ssh-policy.yml on every push and pull request.
 
-    python3 scripts/check_ssh_policy.py [--allow-public-ssh FILE:TYPE.NAME] [PATH ...]
+    python3 scripts/check_ssh_policy.py [PATH ...]
 
 With no PATH it checks every file `git ls-files` lists, except this script and its
 fixtures. Prints `path:line: rule: message` per finding and exits 1 if there is any.
-
---allow-public-ssh is the phase 1 transition only: main.tf keeps its port 22 ingress until
-the phase 2 commit removes it, and that commit deletes the flag from ssh-policy.yml. The
-flag names exactly one resource and suppresses only the public-ssh rule inside it. It fails
-the run once that resource has no port 22 ingress, or more than one, so it can neither
-outlive the ingress nor cover a second one.
-
-The host access health job's --allow-terraform-public-22 is the same transition, so it
-expires with this flag: with no --allow-public-ssh in force, any tracked file still naming
-it fails. Otherwise a forgotten health flag would tolerate, for good, an undescribed
-break-glass rule of the same shape.
 """
 import argparse
 import re
@@ -30,7 +19,6 @@ from pathlib import Path
 from typing import Iterator, List, Optional, Tuple
 
 SELF = 'scripts/check_ssh_policy.py'
-HEALTH_ALLOWANCE = '--allow-terraform-public-22'
 FIXTURES = 'tests/ssh_policy_fixtures/'
 
 # Host-key weakening, matched per line in any file type. The workspace's
@@ -70,7 +58,6 @@ class Finding:
     line: int
     rule: str
     message: str
-    resource: Optional[str] = None
 
     def render(self) -> str:
         return f'{self.path}:{self.line}: {self.rule}: {self.message}'
@@ -190,8 +177,7 @@ def terraform_findings(path: str, raw_text: str) -> Iterator[Finding]:
                     sourced = has_address_source(ingress_body)
                 if covered and sourced:
                     yield Finding(path, line_of(text, start + ingress.start()), 'public-ssh',
-                                  f'{resource_id} ingress admits port 22 ({why}) from an address range',
-                                  resource_id)
+                                  f'{resource_id} ingress admits port 22 ({why}) from an address range')
             continue
         if kind == 'aws_security_group_rule' and (attribute(body, 'type') or '').strip('"') != 'ingress':
             continue
@@ -199,7 +185,7 @@ def terraform_findings(path: str, raw_text: str) -> Iterator[Finding]:
         covered, why = covers_port_22(body, protocol_attribute)
         if covered and has_address_source(body):
             yield Finding(path, line_of(text, resource.start()), 'public-ssh',
-                          f'{resource_id} admits port 22 ({why}) from an address range', resource_id)
+                          f'{resource_id} admits port 22 ({why}) from an address range')
 
     for connection in CONNECTION_BLOCK.finditer(text):
         brace = connection.end() - 1
@@ -254,23 +240,10 @@ def tracked_files(root: Path) -> List[str]:
     return [p for p in listed.stdout.splitlines() if p != SELF and not p.startswith(FIXTURES)]
 
 
-def parse_allowance(raw: str) -> Tuple[str, str]:
-    path, sep, resource = raw.rpartition(':')
-    if not sep or not path or not re.fullmatch(r'[a-z0-9_]+\.[A-Za-z0-9_-]+', resource):
-        raise SystemExit(f'--allow-public-ssh wants FILE:TYPE.NAME, got {raw!r}')
-    return path, resource
-
-
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
-    parser.add_argument('--allow-public-ssh', action='append', default=[],
-                        help='phase 1 only: FILE:TYPE.NAME of the one resource whose port 22 ingress may stay')
     parser.add_argument('paths', nargs='*')
     args = parser.parse_args(argv)
-    if len(args.allow_public_ssh) > 1:
-        parser.error('--allow-public-ssh may name one resource only')
-    allowed_file, allowed_resource = (parse_allowance(args.allow_public_ssh[0]) if args.allow_public_ssh
-                                      else (None, None))
 
     root = Path.cwd()
     paths = args.paths or tracked_files(root)
@@ -284,26 +257,6 @@ def main(argv: Optional[List[str]] = None) -> int:
         except UnicodeDecodeError:
             continue  # binary files (images) carry no config
         findings += check_file(path, text)
-        if not allowed_resource:
-            findings += [Finding(path, number, 'stale-health-allowance',
-                                 f'{HEALTH_ALLOWANCE} outlived --allow-public-ssh; delete it with the port 22 ingress')
-                         for number, line in enumerate(text.splitlines(), start=1) if HEALTH_ALLOWANCE in line]
-
-    if allowed_resource:
-        allowed = [f for f in findings
-                   if f.rule == 'public-ssh' and (f.path, f.resource) == (allowed_file, allowed_resource)]
-        if len(allowed) > 1:
-            findings.append(Finding(allowed_file, 1, 'allowance-too-wide',
-                                    f'{allowed_resource} has {len(allowed)} port 22 ingresses; '
-                                    'the phase 1 allowance covers exactly one'))
-        elif allowed:
-            findings = [f for f in findings if f not in allowed]
-            print(f'allowed for phase 1 only: {allowed_file}:{allowed_resource} '
-                  f'(one port 22 ingress); the phase 2 commit removes it and this flag')
-        else:
-            findings.append(Finding(allowed_file, 1, 'stale-allowance',
-                                    f'{allowed_resource} has no port 22 ingress any more; '
-                                    'delete --allow-public-ssh from .github/workflows/ssh-policy.yml'))
 
     for finding in findings:
         print(finding.render())

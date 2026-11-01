@@ -21,7 +21,7 @@ The bash scripts perform critical orchestration and can be made more robust.
 - [ ] **AWS CLI Waiters:** Where applicable, investigate using `aws ec2 wait` commands instead of custom `while` loops for instance state checks (though the custom loop provides decent feedback, native waiters are standard).
 
 ## 4. Security & Configuration
-- [ ] **SSH Access:** Review `instances/main.tf` security group settings. Access to port 22 is currently open to `0.0.0.0/0`. Consider parameterizing this to allow restricting to a specific IP range if needed.
+- [x] **SSH Access:** Port 22 is closed in `instances/main.tf`; SSH goes through AWS Session Manager.
 
 ## 5. Documentation
 - [ ] **Update README:** Ensure any changes in variable handling (like the Route53 Zone ID) are reflected in the usage documentation.
