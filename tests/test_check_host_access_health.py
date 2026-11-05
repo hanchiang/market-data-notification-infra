@@ -1,6 +1,7 @@
 """The host access health job alerts on a port 22 rule and on a silent login-line push.
 The silent case is an EMPTY Datapoints list, because AWS/Logs publishes nothing for a
-group that received nothing; that branch is the one the check exists for."""
+group that received nothing; that branch is the one the check exists for. Port 22 is
+checked on the groups attached to the host instance, never on a group found by name."""
 import json
 import unittest
 
@@ -10,7 +11,11 @@ SCRIPT = REPO / 'instances' / 'scripts' / 'check_host_access_health.sh'
 
 
 def group(*permissions):
-    return {'SecurityGroups': [{'GroupName': 'sg_22_80_443', 'IpPermissions': list(permissions)}]}
+    return {'SecurityGroups': [{'GroupName': 'sg_22_80_443', 'GroupId': 'sg-host', 'IpPermissions': list(permissions)}]}
+
+
+def host(*group_ids):
+    return {'Reservations': [{'Instances': [{'SecurityGroups': [{'GroupId': g} for g in group_ids]}]}]}
 
 
 def tcp(port, cidr, description=None):
@@ -25,6 +30,8 @@ PUBLIC_22 = tcp(22, '0.0.0.0/0')
 BREAK_GLASS_22 = tcp(22, '203.0.113.0/24', 'break-glass 2026-10-28T09:00Z')
 EVENTS = {'Label': 'IncomingLogEvents', 'Datapoints': [{'Sum': 7.0, 'Unit': 'None'}]}
 SILENT = {'Label': 'IncomingLogEvents', 'Datapoints': []}
+HOST = host('sg-host')
+OPEN_22 = 'port 22 is open on sg_22_80_443 (sg-host) to'
 
 
 class HostAccessHealthTest(unittest.TestCase):
@@ -36,11 +43,14 @@ class HostAccessHealthTest(unittest.TestCase):
     def tearDown(self):
         self.fake.cleanup()
 
-    def check(self, groups, metric, *args):
+    def check(self, groups, metric, *args, instances=HOST):
+        # A str is written as-is, so a test can hand the script a reply jq cannot read.
+        (self.fake.dir / 'instances.json').write_text(instances if isinstance(instances, str) else json.dumps(instances))
         (self.fake.dir / 'groups.json').write_text(json.dumps(groups))
         (self.fake.dir / 'metric.json').write_text(json.dumps(metric))
         self.fake.add('aws', f'''
 case "$1 $2" in
+  "ec2 describe-instances") cat {self.fake.dir}/instances.json ;;
   "ec2 describe-security-groups") cat {self.fake.dir}/groups.json ;;
   "cloudwatch get-metric-statistics") cat {self.fake.dir}/metric.json ;;
   *) exit 99 ;;
@@ -71,7 +81,7 @@ esac''')
                 self.fake.log.unlink(missing_ok=True)
                 result = self.check(group(*WEB, rule), EVENTS)
                 self.assertEqual(result.returncode, 1)
-                self.assertIn('port 22 is open on sg_22_80_443 to 1 source(s)', self.alert_text())
+                self.assertIn(f'{OPEN_22} 1 source(s)', self.alert_text())
 
     def test_each_source_on_a_port_22_rule_counts(self):
         rule = {'IpProtocol': 'tcp', 'FromPort': 22, 'ToPort': 22, 'IpRanges': [{'CidrIp': '0.0.0.0/0'}],
@@ -85,10 +95,32 @@ esac''')
         self.assertEqual(self.check(group(*WEB), EVENTS, '--anything').returncode, 2)
         self.assertEqual(self.fake.calls('curl'), [])
 
-    def test_a_missing_security_group_alerts(self):
-        result = self.check({'SecurityGroups': []}, EVENTS)
+    def test_no_host_instance_alerts(self):
+        result = self.check(group(*WEB), EVENTS, instances={'Reservations': []})
         self.assertEqual(result.returncode, 1)
-        self.assertIn('security group sg_22_80_443 not found', self.alert_text())
+        self.assertIn('could not read security groups for an instance tagged Name=market_data_notification', self.alert_text())
+        self.assertFalse([c for c in self.fake.calls('aws') if c['argv'][:2] == ['ec2', 'describe-security-groups']])
+
+    def test_an_unreadable_instance_reply_alerts(self):
+        # jq fails inside a process substitution, which set -e cannot see; the empty list must still alert.
+        no_groups_key = {'Reservations': [{'Instances': [{'SecurityGroups': [{'GroupId': 'sg-host'}]}, {}]}]}
+        for reply in ('not json', no_groups_key):
+            with self.subTest(reply=reply):
+                self.fake.log.unlink(missing_ok=True)
+                result = self.check(group(*WEB), EVENTS, instances=reply)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn('could not read security groups', self.alert_text())
+
+    def test_groups_come_from_the_host_instance_not_by_name(self):
+        # A group name is unique only within a VPC, so only the host's own group ids are asked for.
+        self.check(group(*WEB), EVENTS, instances=host('sg-host', 'sg-extra', 'sg-host'))
+        [instances_call] = [c for c in self.fake.calls('aws') if c['argv'][:2] == ['ec2', 'describe-instances']]
+        self.assertIn('Name=tag:Name,Values=market_data_notification', instances_call['argv'])
+        self.assertIn('Name=instance-state-name,Values=pending,running,stopping,stopped', instances_call['argv'])
+        [groups_call] = [c for c in self.fake.calls('aws') if c['argv'][:2] == ['ec2', 'describe-security-groups']]
+        argv = groups_call['argv']
+        self.assertEqual(argv[argv.index('--group-ids') + 1:argv.index('--output')], ['sg-extra', 'sg-host'])
+        self.assertNotIn('--filters', argv)
 
     def test_the_bot_token_is_not_in_curl_argv(self):
         self.check(group(*WEB), SILENT)
