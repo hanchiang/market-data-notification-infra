@@ -3,14 +3,16 @@
 set -euo pipefail
 
 # Two out-of-band checks no tracked-file check can see, run on every start-workflow firing:
-#   1. any port 22 rule on the host's security group, such as a forgotten break-glass rule;
+#   1. any port 22 rule on a security group attached to the host, such as a forgotten
+#      break-glass rule. Groups are found from the instance, never by name: a group name is
+#      unique only within a VPC, so a same-named group elsewhere would match a by-name lookup;
 #   2. the SSH login-line push silent for 48 hours. AWS/Logs publishes IncomingLogEvents
 #      only when events arrive, so silence is an EMPTY Datapoints list, counted as zero.
 # Either one alerts the dev chat and exits 1. It reads a metric, never log content.
 # With port 22 closed, sessions are the main source of these lines, so 48 hours with no session
 # normally trips check 2.
 
-SECURITY_GROUP_NAME=${HOST_ACCESS_SECURITY_GROUP_NAME:-sg_22_80_443}
+INSTANCE_NAME=${HOST_ACCESS_INSTANCE_NAME:-market_data_notification}
 LOG_GROUP=${HOST_ACCESS_LOG_GROUP:-/market-data-notification/sshd}
 SILENCE_HOURS=${HOST_ACCESS_SILENCE_HOURS:-48}
 
@@ -22,12 +24,18 @@ fi
 
 problems=()
 
-groups=$(aws ec2 describe-security-groups \
-    --filters "Name=group-name,Values=$SECURITY_GROUP_NAME" --output json)
-if [ "$(jq '.SecurityGroups | length' <<< "$groups")" -eq 0 ]
+# Terminated instances keep their tags for a while, so they are filtered out; a stopped host
+# still has its groups and is still checked.
+instances=$(aws ec2 describe-instances \
+    --filters "Name=tag:Name,Values=$INSTANCE_NAME" \
+              "Name=instance-state-name,Values=pending,running,stopping,stopped" --output json)
+mapfile -t group_ids < <(jq -r '[.Reservations[].Instances[].SecurityGroups[].GroupId] | unique | .[]' <<< "$instances")
+if [ "${#group_ids[@]}" -eq 0 ]
 then
-    problems+=("security group $SECURITY_GROUP_NAME not found")
+    problems+=("could not read security groups for an instance tagged Name=$INSTANCE_NAME (none found, or an unreadable reply); port 22 not checked")
 else
+    groups=$(aws ec2 describe-security-groups --group-ids "${group_ids[@]}" --output json)
+    group_label=$(jq -r '[.SecurityGroups[] | "\(.GroupName) (\(.GroupId))"] | join(", ")' <<< "$groups")
     # One row per source on any rule whose port range covers 22 (protocol -1 covers all).
     open_sources=$(jq '
         [ .SecurityGroups[].IpPermissions[]
@@ -38,7 +46,7 @@ else
         | length' <<< "$groups")
     if [ "$open_sources" -gt 0 ]
     then
-        problems+=("port 22 is open on $SECURITY_GROUP_NAME to $open_sources source(s); remove any break-glass rule")
+        problems+=("port 22 is open on $group_label to $open_sources source(s); remove any break-glass rule")
     fi
 fi
 
