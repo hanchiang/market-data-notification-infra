@@ -44,7 +44,8 @@ class HostAccessHealthTest(unittest.TestCase):
         self.fake.cleanup()
 
     def check(self, groups, metric, *args, instances=HOST):
-        (self.fake.dir / 'instances.json').write_text(json.dumps(instances))
+        # A str is written as-is, so a test can hand the script a reply jq cannot read.
+        (self.fake.dir / 'instances.json').write_text(instances if isinstance(instances, str) else json.dumps(instances))
         (self.fake.dir / 'groups.json').write_text(json.dumps(groups))
         (self.fake.dir / 'metric.json').write_text(json.dumps(metric))
         self.fake.add('aws', f'''
@@ -99,6 +100,16 @@ esac''')
         self.assertEqual(result.returncode, 1)
         self.assertIn('could not read security groups for an instance tagged Name=market_data_notification', self.alert_text())
         self.assertFalse([c for c in self.fake.calls('aws') if c['argv'][:2] == ['ec2', 'describe-security-groups']])
+
+    def test_an_unreadable_instance_reply_alerts(self):
+        # jq fails inside a process substitution, which set -e cannot see; the empty list must still alert.
+        no_groups_key = {'Reservations': [{'Instances': [{'SecurityGroups': [{'GroupId': 'sg-host'}]}, {}]}]}
+        for reply in ('not json', no_groups_key):
+            with self.subTest(reply=reply):
+                self.fake.log.unlink(missing_ok=True)
+                result = self.check(group(*WEB), EVENTS, instances=reply)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn('could not read security groups', self.alert_text())
 
     def test_groups_come_from_the_host_instance_not_by_name(self):
         # A group name is unique only within a VPC, so only the host's own group ids are asked for.
