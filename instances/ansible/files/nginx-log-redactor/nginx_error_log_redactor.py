@@ -1,29 +1,37 @@
 #!/usr/bin/env python3
-"""Nginx error-log redactor: reads syslog datagrams from the socket systemd passes in,
-redacts the query of each line, and appends the result to /var/log/nginx/error.log.
+"""Nginx error-log redactor: Nginx sends its error log here, and this script writes it to
+/var/log/nginx/error.log with every query value replaced by `<redacted>`.
 
-Nginx cannot format its error log, and request-scoped lines end with the raw request line,
-the upstream URL, the host and, when the request sent one, the referrer, so a query value (a
-token, say) would reach disk. Nginx
-therefore sends the error log here (`error_log syslog:server=unix:...`) instead of to a file.
+Why it exists: Nginx's error log has no configurable format. When a request fails (a rate
+limit, an upstream timeout), Nginx appends the raw request line to its message, so a token
+in the URL would reach disk. The site config therefore sends the error log to this script's
+socket (`error_log syslog:server=unix:...`), not to a file.
 
-What this guarantees, for every line (a line is a datagram piece split on newline characters only):
-- From the first `?` to the end of the line, nothing is written except `<redacted>` and ASCII
-  parameter names that are followed by `=`. A name that is not a plain name, an entry with
-  no `=`, and anything after a value's first ASCII whitespace become `<redacted>`.
-  Trade-off: the fields after the query (`upstream`, `host`, `referrer`) are lost on such a
-  line. Nginx keeps bytes inside the request field that a tokenizer would treat as
-  whitespace (NBSP, U+3000, a tab, a space in the URI) or as a closing quote, so no
-  delimiter after the `?` can be trusted to end the query.
-- A line with no parseable header keeps only a time, level and pid that sit at the start of
-  the line, after the optional syslog prefix, in that order. Anything else is `-`.
-- Control characters and U+2028/U+2029/U+0085 are escaped, so one datagram piece is
-  one output line.
-- It never raises while redacting, and the input goes nowhere but the output file. Nothing
-  reaches stdout or stderr except an exception class name, so no traceback carries a value
+Example, a rate-limited webhook. Nginx sends:
+    ... request: "POST /tradingview/daily-stocks?secret=s3cr3t-value&symbol=SPY HTTP/1.1", host: "example.com"
+and this writes:
+    ... request: "POST /tradingview/daily-stocks?secret=<redacted>&symbol=<redacted> <redacted>
+A line with no `?`, such as an upstream timeout on `/healthz`, keeps its message unchanged.
+Only the syslog prefix Nginx adds is removed.
+
+The rules, for each line (a datagram is split into lines on newline characters only):
+- From the first `?` on, only parameter names followed by `=` survive. A name is ASCII: a
+  letter or `_`, then letters, digits, `_`, `.` or `-`, with at most one `[...]` group,
+  20 characters in all (`_ENTRY`).
+  Every value becomes `<redacted>`, and so does everything from the first entry that is
+  not such a `name=value`. That is why ` HTTP/1.1", host: ...` is gone in the example, and
+  `upstream` and `referrer` would go the same way: Nginx keeps tabs, odd spaces and quotes
+  inside the request field, so nothing after the `?` can be trusted to end the query.
+- A line that does not start with the usual `time [level] pid#tid:` keeps only those fields
+  that open it, in order, and `-` for the rest, so text placed later cannot pose as a pid:
+  `junk 4111111111 ?token=abc` becomes `- [-] -: <redacted>`.
+- Control characters and Unicode line separators are escaped, so one input line is one
+  output line.
+- It never raises while redacting. The input goes nowhere but the output file, and stdout
+  and stderr get nothing but an exception's class name, so no traceback carries a value
   into journald.
-What this does NOT guarantee: a secret that is not in a query string (a header, a path
-segment) or that sits before the first `?` is written as Nginx wrote it.
+Not covered: a secret outside the query (a header, a path segment, any text before the
+first `?`) is written as Nginx wrote it.
 
 Line format: `YYYY/MM/DD HH:MM:SS [level] pid#tid: *cid message, client: ..., server: ...,
 request: "...", upstream: "...", host: "...", referrer: "..."`. The host's error log confirmed
