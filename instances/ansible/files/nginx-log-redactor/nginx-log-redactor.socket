@@ -1,0 +1,12 @@
+[Unit]
+Description=Socket for the Nginx error-log redactor
+
+[Socket]
+# Must equal the path in every `error_log syslog:server=unix:...` line in the site config.
+# The socket exists before Nginx starts and queues datagrams while the service restarts.
+ListenDatagram=/run/nginx-log-redactor/error.sock
+SocketUser=www-data
+SocketMode=0600
+
+[Install]
+WantedBy=sockets.target

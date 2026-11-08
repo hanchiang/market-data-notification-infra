@@ -2,9 +2,85 @@
   name: Configure nginx
   remote_user: "{{ USER }}"
   gather_facts: no
+  # Handlers notified before a failing task still run, and a rerun would not repeat them
+  # (the changed files are already in place). The reload handler runs `nginx -t` first.
+  force_handlers: true
   vars_files:
     - ../vars.yml
   tasks:
+    # The site config sends every server block's error log to this socket. Install and
+    # start it before Nginx is reloaded onto that config (the handler, run at the flush
+    # below), so the first error line Nginx sends has a reader. The config test itself
+    # does not need the socket.
+    # What restarts what: a changed script or service unit restarts the service only. A
+    # changed socket unit restarts the socket and also reloads Nginx, so that its workers
+    # reconnect to the new socket (from memory, unverified).
+    - name: Install the nginx error-log redactor script
+      become: yes
+      copy:
+        src: ../files/nginx-log-redactor/nginx_error_log_redactor.py
+        dest: /usr/local/sbin/nginx_error_log_redactor.py
+        owner: root
+        group: root
+        mode: "0755"
+      notify: Restart nginx log redactor service
+
+    - name: Install the nginx error-log redactor socket unit
+      become: yes
+      copy:
+        src: ../files/nginx-log-redactor/nginx-log-redactor.socket
+        dest: /etc/systemd/system/nginx-log-redactor.socket
+        owner: root
+        group: root
+        mode: "0644"
+      register: redactor_socket_unit
+      notify:
+        - Restart nginx log redactor socket
+        - Validate and reload nginx
+
+    - name: Install the nginx error-log redactor service unit
+      become: yes
+      copy:
+        src: ../files/nginx-log-redactor/nginx-log-redactor.service
+        dest: /etc/systemd/system/nginx-log-redactor.service
+        owner: root
+        group: root
+        mode: "0644"
+      register: redactor_service_unit
+      notify: Restart nginx log redactor service
+
+    # Only when a unit file changed, so a second run reports no change.
+    - name: Reload systemd after installing the redactor units
+      become: yes
+      systemd:
+        daemon_reload: yes
+      when: redactor_socket_unit.changed or redactor_service_unit.changed
+
+    # The redactor runs as www-data, and /var/log/nginx is root-owned on Ubuntu, so it can
+    # append to an existing error.log but not create one. The service's ExecStartPre step
+    # recreates it at each start, but that costs the line whose write failed; this task
+    # fixes the file before the socket ever starts. `touch` with both
+    # times preserved creates a missing file and never edits an existing one, and it
+    # enforces owner and mode either way, so a root-owned file from Nginx's old default
+    # is fixed. (`copy` with `force: no` skips an existing file, attributes included.)
+    - name: Ensure the redacted error log exists and is writable by the redactor
+      become: yes
+      file:
+        path: /var/log/nginx/error.log
+        state: touch
+        access_time: preserve
+        modification_time: preserve
+        owner: www-data
+        group: adm
+        mode: "0640"
+
+    - name: Enable and start the redactor socket before nginx is validated
+      become: yes
+      systemd:
+        name: nginx-log-redactor.socket
+        enabled: yes
+        state: started
+
     - name: Ensure common nginx config directory exists
       become: yes
       file:
@@ -23,6 +99,8 @@
         group: root
         mode: "0644"
       loop:
+        - src: ../files/nginx/log_maps.conf
+          dest: /etc/nginx/common/log_maps.conf
         - src: ../files/nginx/json_log.conf
           dest: /etc/nginx/common/json_log.conf
         - src: ../files/nginx/market_data_notification_upstream.conf
@@ -88,7 +166,61 @@
       check_mode: false
       failed_when: catch_all_probe.rc != 52
 
+    # End-to-end check of the error-log redactor. Port 80 cannot produce the line: its
+    # `return` runs in the server-rewrite phase, before Nginx's body-size check. So send a
+    # POST to the 443 block whose Content-Length is over client_max_body_size (1m); Nginx
+    # answers 413 and writes a request-scoped error line quoting the request, query
+    # included. --resolve keeps the real certificate check and sends nothing off the box.
+    # Only bytes appended after the recorded size are read, so an old line cannot satisfy it.
+    # The redactor keeps the name and drops everything after the value, so the expected
+    # line is `request: "POST /?token=<redacted> <redacted>`.
+    # The line travels Nginx -> socket -> redactor -> file, so poll briefly for it. The log
+    # content is never printed: the probe's own failure must not echo a value.
+    - name: Probe that the redacted error log names the query but not its value
+      become: yes
+      shell: |
+        set -eu
+        log=/var/log/nginx/error.log
+        # The whole redacted shape, not just the name: the header Nginx writes, then the
+        # request with its value replaced. The first deploy confirms the real format.
+        shape='\[error\] [0-9]+#[0-9]+: \*[0-9]+ .*request: "POST /\?token=<redacted> <redacted>$'
+        before=$(stat -c %s "$log")
+        code=$(curl -s -o /dev/null -m 5 -w '%{http_code}' \
+          --resolve {{ DOMAIN }}:443:127.0.0.1 \
+          -X POST -H 'Content-Length: 2000000' \
+          'https://{{ DOMAIN }}/?token=probe-value' || true)
+        [ "$code" = "413" ] || { echo "expected HTTP 413, got $code"; exit 1; }
+        for _ in 1 2 3 4 5 6 7 8 9 10; do
+          if tail -c +$((before + 1)) "$log" | grep -Eq "$shape"; then
+            if tail -c +$((before + 1)) "$log" | grep -q 'probe-value'; then
+              echo "error.log holds the probe's query value"; exit 1
+            fi
+            exit 0
+          fi
+          sleep 0.5
+        done
+        echo "error.log gained no line with the redacted shape"; exit 1
+      changed_when: false
+      check_mode: false
+
   handlers:
+    # Handlers run in definition order, so both restarts come before the nginx reload. A
+    # socket restart also restarts the service through its `Requires=` on the socket. If
+    # the service is restarted again by its own handler in the same run, that is harmless:
+    # datagrams wait in the socket, which the second restart does not touch, and the
+    # service holds no state.
+    - name: Restart nginx log redactor socket
+      become: yes
+      systemd:
+        name: nginx-log-redactor.socket
+        state: restarted
+
+    - name: Restart nginx log redactor service
+      become: yes
+      systemd:
+        name: nginx-log-redactor.service
+        state: restarted
+
     - name: Validate and reload nginx
       become: yes
       become_method: su

@@ -1,6 +1,15 @@
 include /etc/nginx/common/market_data_notification_upstream.conf;
 
+include /etc/nginx/common/log_maps.conf;
 include /etc/nginx/common/json_log.conf;
+
+# Every server block below sends its error log to the redactor's socket
+# (nginx-log-redactor.socket, installed by playbooks/nginx.yml), never to a file:
+# request-scoped error lines quote the raw request line, query values included, and
+# the redactor strips the values before the line reaches /var/log/nginx/error.log.
+# The level is `warn` so rate-limit delays are recorded; never go below it, because
+# `info` lines quote request headers. A block without its own error_log would fall
+# back to the unmanaged nginx.conf default file, raw.
 
 # Catches a Host matching no server_name, which is what a raw-IP scan sends.
 # 444 drops the connection instead of redirecting the scanner into the app.
@@ -25,6 +34,7 @@ server {
   server_name _;
 
   access_log /var/log/nginx/access.log json_combined;
+  error_log syslog:server=unix:/run/nginx-log-redactor/error.sock,nohostname warn;
 
   return 444;
 }
@@ -40,6 +50,7 @@ server {
   # so a block without it silently corrupts the log. 38% of the log was
   # unparseable before 2026-09-07 for exactly this reason.
   access_log /var/log/nginx/access.log json_combined;
+  error_log syslog:server=unix:/run/nginx-log-redactor/error.sock,nohostname warn;
 
   return 301 https://$host$request_uri;
 }
@@ -58,7 +69,7 @@ server {
   client_max_body_size 1m;
 
   access_log /var/log/nginx/access.log json_combined;
-  error_log /var/log/nginx/error.log;
+  error_log syslog:server=unix:/run/nginx-log-redactor/error.sock,nohostname warn;
 
   include /etc/nginx/common/favicon_location.conf;
 

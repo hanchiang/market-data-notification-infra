@@ -1,0 +1,26 @@
+[Unit]
+Description=Nginx error-log redactor
+Requires=nginx-log-redactor.socket
+After=nginx-log-redactor.socket
+# Never give up on a crash loop: the socket keeps queueing, and a dead redactor means no error log.
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+# www-data matches the owner logrotate gives the recreated error.log.
+User=www-data
+# `+` runs this one command as root, outside User= and the sandbox below. /var/log/nginx is
+# root-owned, so www-data can append to error.log but cannot create it. This makes sure the
+# file exists with the owner and mode logrotate gives it, without truncating or rewriting an
+# existing one. If the file is later removed, the redactor exits on its first failed write
+# and Restart=always runs this step again.
+ExecStartPre=+/bin/sh -c '[ -e /var/log/nginx/error.log ] || : > /var/log/nginx/error.log && chown www-data:adm /var/log/nginx/error.log && chmod 0640 /var/log/nginx/error.log'
+ExecStart=/usr/bin/python3 /usr/local/sbin/nginx_error_log_redactor.py
+Restart=always
+# Two seconds, so a failure that persists (a missing log directory) does not spin.
+RestartSec=2
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ReadWritePaths=/var/log/nginx
