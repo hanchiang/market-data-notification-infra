@@ -36,6 +36,15 @@ instance_info=$(get_instance_info)
 instance_state=$(echo "$instance_info" | jq -r '.state')
 instance_id=$(echo "$instance_info" | jq -r '.id')
 
+# The helper pipes the describe call into jq, so a failed call (access denied) reaches
+# here as an empty id, and no match (wrong region, renamed tag) as "null". Both used to
+# fall to the not-running branch and pass the job with the host still up.
+if [ -z "$instance_id" ] || [ "$instance_id" = "null" ]
+then
+    echo "Could not find the instance; the describe-instances call failed or matched nothing" >&2
+    exit 1
+fi
+
 if [ "$instance_state" = "running" ]
 then
     DOMAINS=("$DOMAIN")

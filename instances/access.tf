@@ -21,7 +21,8 @@ locals {
   # assume-role then fails closed. Re-check the repo's OIDC customization before any of
   # those (third-party audit of configure-aws-credentials, residual risk 2).
   backend_deploy_github_subject = "repo:hanchiang/market-data-notification:ref:refs/heads/master"
-  infra_start_github_subject    = "repo:hanchiang/market-data-notification-infra:ref:refs/heads/master"
+  # Shared by the start and stop roles: both workflows run from the infra repo's master.
+  infra_github_subject = "repo:hanchiang/market-data-notification-infra:ref:refs/heads/master"
 }
 
 #### Session document
@@ -43,8 +44,6 @@ resource "aws_ssm_document" "ssh22" {
 #### Callers
 
 # One provider per issuer URL per account, shared by every role that trusts GitHub.
-# Created here for the host-access roles. The stop workflow still signs in with a static
-# key; when it moves to a role, that role reuses this provider.
 resource "aws_iam_openid_connect_provider" "github_actions" {
   url            = "https://token.actions.githubusercontent.com"
   client_id_list = ["sts.amazonaws.com"]
@@ -138,7 +137,8 @@ resource "aws_iam_user_policy_attachment" "host_ssh" {
 data "aws_iam_policy_document" "github_assume_role" {
   for_each = {
     backend_deploy = local.backend_deploy_github_subject
-    infra_start    = local.infra_start_github_subject
+    infra_start    = local.infra_github_subject
+    infra_stop     = local.infra_github_subject
   }
 
   statement {
@@ -239,6 +239,63 @@ resource "aws_iam_role_policy" "infra_start" {
   })
 }
 
+# Replaces the CI user's static key, the stop workflow's last use of it. No host access
+# policy: the stop path never opens a session to the host.
+resource "aws_iam_role" "infra_stop" {
+  name               = "market-data-infra-stop"
+  description        = "Infra stop workflow: delete the service record and stop the instance"
+  assume_role_policy = data.aws_iam_policy_document.github_assume_role["infra_stop"].json
+
+  tags = {
+    Name = "market-data-infra-stop"
+  }
+}
+
+# What stop.sh and update-ec2-route53.sh call on the DELETE path, and nothing else.
+resource "aws_iam_role_policy" "infra_stop" {
+  name = "market_data_notification_infra_stop"
+  role = aws_iam_role.infra_stop.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "StopThisInstance"
+        Effect   = "Allow"
+        Action   = "ec2:StopInstances"
+        Resource = aws_instance.web.arn
+      },
+      {
+        # Delete of A records only: the stop path sends nothing else, and without the
+        # condition a stolen session could UPSERT the service record to another address.
+        Sid      = "DeleteTheServiceRecord"
+        Effect   = "Allow"
+        Action   = "route53:ChangeResourceRecordSets"
+        Resource = "arn:aws:route53:::hostedzone/${var.route53_hosted_zone_id}"
+        Condition = {
+          "ForAllValues:StringEquals" = {
+            "route53:ChangeResourceRecordSetsActions"     = ["DELETE"]
+            "route53:ChangeResourceRecordSetsRecordTypes" = ["A"]
+          }
+        }
+      },
+      {
+        Sid      = "ReadTheServiceRecord"
+        Effect   = "Allow"
+        Action   = "route53:ListResourceRecordSets"
+        Resource = "arn:aws:route53:::hostedzone/${var.route53_hosted_zone_id}"
+      },
+      {
+        # Takes no resource-level scoping.
+        Sid      = "FindTheInstance"
+        Effect   = "Allow"
+        Action   = "ec2:DescribeInstances"
+        Resource = "*"
+      },
+    ]
+  })
+}
+
 #### Instance side
 
 # aws_iam_role.letsencrypt_backup is the host's only role: an instance takes one, and S3
@@ -315,6 +372,11 @@ output "backend_deploy_role_arn" {
 output "infra_start_role_arn" {
   description = "AWS_START_ROLE_ARN secret in the infra repo"
   value       = aws_iam_role.infra_start.arn
+}
+
+output "infra_stop_role_arn" {
+  description = "AWS_STOP_ROLE_ARN secret in the infra repo"
+  value       = aws_iam_role.infra_stop.arn
 }
 
 output "ssh_session_document_name" {
