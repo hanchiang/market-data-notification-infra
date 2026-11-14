@@ -29,7 +29,7 @@ variable "ssh_public_key_path" {
 }
 
 variable "route53_hosted_zone_id" {
-  description = "Hosted zone holding the service record; scopes the start role's Route53 rights. Same value as the ROUTE53_HOSTED_ZONE_ID GitHub variable."
+  description = "Hosted zone holding the service record; scopes the start and stop roles' Route53 rights. Same value as the ROUTE53_HOSTED_ZONE_ID GitHub variable."
   type        = string
 }
 
