@@ -99,10 +99,16 @@ jobs:
       - name: Check if backend is already healthy
         id: health_check
         run: |
-          if curl -fsS "$HOST_NAME/healthz" > /dev/null
+          # Port 80 answers this name with a 301 even with the backend down, and curl -f counts
+          # that as success. So strip any scheme and one trailing slash, ask HTTPS directly,
+          # and pass only on a 200 from a curl that exited cleanly.
+          health_host=${HOST_NAME#*://}
+          health_url="https://${health_host%/}/healthz"
+          if code=$(curl -sS -o /dev/null -w '%{http_code}' "$health_url") && [ "$code" = 200 ]
           then
             echo "service_healthy=true" >> "$GITHUB_OUTPUT"
           else
+            echo "Backend not healthy: HTTP $code"
             echo "service_healthy=false" >> "$GITHUB_OUTPUT"
           fi
   skip_already_healthy:
@@ -187,14 +193,17 @@ jobs:
       - name: Wait for deployed service health
         run: |
           # start.sh only dispatches backend deploy, so wait here for the service to become healthy.
+          # HTTPS and a 200 only, for the reason in the health_check job above.
+          health_host=${HOST_NAME#*://}
+          health_url="https://${health_host%/}/healthz"
           for attempt in $(seq 1 30)
           do
-            if curl -fsS "$HOST_NAME/healthz" > /dev/null
+            if code=$(curl -sS -o /dev/null -w '%{http_code}' "$health_url") && [ "$code" = 200 ]
             then
               echo "market_data_notification is healthy"
               exit 0
             fi
-            echo "Waiting for backend deploy health, attempt $attempt"
+            echo "Waiting for backend deploy health, attempt $attempt: HTTP $code"
             sleep 20
           done
           echo "market_data_notification did not become healthy after start"
