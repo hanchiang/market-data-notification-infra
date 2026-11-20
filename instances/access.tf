@@ -6,7 +6,7 @@
 #   backend deploy role ─┼─ ssm:StartSession ─► MarketDataNotification-SSH22 ─► agent ─► sshd :22
 #   infra start role ────┘   (this instance only)  (port fixed at 22)
 #
-#   sshd ─► /var/log/auth.log ─► amazon-cloudwatch-agent ─► /market-data-notification/sshd (90 days)
+#   sshd ─► rsyslog ─► /var/log/sshd-login.log ─► amazon-cloudwatch-agent ─► /market-data-notification/sshd (90 days)
 #
 # Why each choice was made is in the comment above each block. How the operator reaches
 # the host, re-pins after a rebuild and breaks glass: instances/README.md. The rule against

@@ -1,8 +1,17 @@
 # Ships sshd's login lines off the host as they are written (Goal 11): the record
 # survives a rebuild, and root on a compromised host cannot erase lines already sent.
 #
-#   sshd -> /var/log/auth.log -> amazon-cloudwatch-agent (as cwagent, sshd[ lines only)
-#        -> CloudWatch Logs /market-data-notification/sshd (90 days, Terraform-owned)
+#   sshd -> rsyslog -> /var/log/auth.log (unchanged)
+#                   -> /var/log/sshd-login.log (syslog:cwagent 0640, sshd lines only)
+#        -> amazon-cloudwatch-agent (as cwagent) -> CloudWatch Logs
+#           /market-data-notification/sshd (90 days, Terraform-owned)
+#
+# The agent reads its own file through its primary group, never a supplementary one.
+# Pinned 1.300074.0 sets supplementary groups with x/sys/unix.Setgroups, which changes
+# only the calling thread, while its setgid and setuid change every thread. So whether
+# a thread can read through adm depends on scheduling. That is the likely cause of the
+# 2026-11-09 start that could not read auth.log for 26 hours (workspace ticket
+# docs/tickets/todo/2026-11-10-infra-login-lines-stop-after-agent-restart.md).
 #
 # The pins come from the 2026-10-28 third-party audit. Its verdict, caveats and the
 # upgrade trigger (move to 1.300074.1 once AWS publishes it) live in the workspace
@@ -21,15 +30,17 @@
     # Versioned path: AWS's docs print only `latest`, which moves under a pin.
     cwa_base_url: "https://amazoncloudwatch-agent-us-east-1.s3.us-east-1.amazonaws.com/ubuntu/arm64/{{ cwa_version }}"
     cwa_config_path: /opt/aws/amazon-cloudwatch-agent/etc/ssh-login-log.json
+    cwa_log_path: /opt/aws/amazon-cloudwatch-agent/logs/amazon-cloudwatch-agent.log
+    cwa_login_log: /var/log/sshd-login.log
     # Logs only: a metrics section would publish billed custom metrics. No
     # retention_in_days: Terraform owns retention, and setting it here would need
     # DescribeLogGroups and PutRetentionPolicy, which the instance role does not have.
-    # from_beginning is left at its default (true), so the first start ships the sshd
-    # lines already in the current auth.log (up to a week, a few KB). Kept on purpose:
-    # it puts the days before the push started off the host too.
-    # The filter keeps sudo lines on the host, where a secret on a sudo command line
-    # would otherwise leave it. OpenSSH 9.8+ logs as sshd-session[; Ubuntu 22.04 ships
-    # 8.9, so widen the expression on an OS upgrade.
+    # from_beginning is left at its default (true), so a first start ships what the
+    # login file already holds. The file starts empty, and a line also in auth.log may
+    # be sent twice across the cutover; duplicates are harmless in the access record.
+    # The rsyslog rule and this filter both keep sudo lines on the host, where a secret
+    # on a sudo command line would otherwise leave it. OpenSSH 9.8+ logs as
+    # sshd-session[; Ubuntu 22.04 ships 8.9, so widen both on an OS upgrade.
     cwa_config:
       agent:
         region: us-east-1
@@ -39,14 +50,14 @@
         logs_collected:
           files:
             collect_list:
-              - file_path: /var/log/auth.log
+              - file_path: "{{ cwa_login_log }}"
                 log_group_name: /market-data-notification/sshd
                 log_stream_name: "{instance_id}"
                 filters:
                   - type: include
                     expression: 'sshd\['
   tasks:
-    - name: Require rsyslog's auth.log, the file the agent reads
+    - name: Require rsyslog's auth.log, a sign rsyslog writes sshd's lines
       stat:
         path: /var/log/auth.log
       register: auth_log
@@ -115,13 +126,125 @@
             state: absent
           when: cwa_work.path is defined
 
-    # auth.log is syslog:adm 0640, so adm read is all the agent needs once it drops root.
-    - name: Let cwagent read auth.log through the adm group
+    # rsyslog runs as syslog:syslog and /var/log is 0755 root:syslog, so it cannot create
+    # this file, only append to it. The file is made here, and logrotate's create remakes it.
+    # rsyslog keeps writing to a deleted file's open handle, so a remade file also needs
+    # the rsyslog restart below.
+    - name: Create the login file, readable through cwagent's primary group
+      become: yes
+      file:
+        path: "{{ cwa_login_log }}"
+        state: touch
+        owner: syslog
+        group: cwagent
+        mode: "0640"
+        access_time: preserve
+        modification_time: preserve
+      register: login_file
+
+    - name: Rotate the login file the way rsyslog rotates auth.log
+      become: yes
+      copy:
+        dest: /etc/logrotate.d/sshd-login
+        owner: root
+        group: root
+        mode: "0644"
+        validate: logrotate -d %s
+        content: |
+          # Managed by market-data-notification-infra ssh-login-log.yml.
+          {{ cwa_login_log }} {
+          	# Restates logrotate.conf's global, which the validate run does not read.
+          	su root adm
+          	rotate 4
+          	weekly
+          	missingok
+          	notifempty
+          	compress
+          	delaycompress
+          	create 0640 syslog cwagent
+          	postrotate
+          		/usr/lib/rsyslog/rsyslog-rotate
+          	endscript
+          }
+
+    - name: Copy sshd's lines into the login file
+      become: yes
+      copy:
+        dest: /etc/rsyslog.d/40-sshd-login.conf
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          # Managed by market-data-notification-infra ssh-login-log.yml.
+          # auth.log keeps every line; this file is what the CloudWatch agent reads.
+          if $programname == 'sshd' then {
+              action(type="omfile" file="{{ cwa_login_log }}")
+          }
+      register: rsyslog_rule
+
+    # A run cut off between the copy above and the restart below leaves the rule on disk
+    # but not loaded, and the next run sees no change. So restart whenever rsyslog
+    # started before the rule file was last written. Exit 1 is "not stale"; any other
+    # failure means the check could not run (rsyslog never started, an unparsed
+    # timestamp), which fails the run rather than silently skipping the restart.
+    - name: Check whether rsyslog started before its rule was written
+      shell: |
+        set -euo pipefail
+        stamp=$(systemctl show -p ActiveEnterTimestamp --value rsyslog) || exit 2
+        started=$(date -d "$stamp" +%s) || exit 2
+        [ -n "$stamp" ] || exit 2
+        test "$(stat -c %Y /etc/rsyslog.d/40-sshd-login.conf)" -gt "$started"
+      args:
+        executable: /bin/bash
+      register: rsyslog_stale
+      changed_when: false
+      failed_when: rsyslog_stale.rc > 1
+
+    # A broken rule would stop all of rsyslog's logging, auth.log included, at its next
+    # restart. So it is checked first, and on any failure it is removed and rsyslog is
+    # brought back up without it, if the config passes without it.
+    - name: Check the rsyslog config, then restart rsyslog
+      when: rsyslog_rule is changed or login_file is changed or rsyslog_stale.rc == 0
+      become: yes
+      block:
+        - name: Check the whole rsyslog config
+          command: rsyslogd -N1
+          changed_when: false
+
+        - name: Restart rsyslog
+          systemd:
+            name: rsyslog
+            state: restarted
+      rescue:
+        - name: Remove the rule that failed the check
+          file:
+            path: /etc/rsyslog.d/40-sshd-login.conf
+            state: absent
+
+        - name: Check the config without the rule
+          command: rsyslogd -N1
+          changed_when: false
+
+        - name: Restart rsyslog without the rule
+          systemd:
+            name: rsyslog
+            state: restarted
+
+        - name: Fail the run
+          fail:
+            msg: >-
+              40-sshd-login.conf failed the rsyslog check or restart; it was removed and
+              rsyslog restarted without it, so login lines are not reaching the login file
+
+    # No supplementary groups: the login file needs none, and adm would let the agent
+    # read all of /var/log. It also makes the failing state the only state, so the
+    # read check below tests what the agent actually holds.
+    - name: Remove cwagent from every supplementary group
       become: yes
       user:
         name: cwagent
-        groups: adm
-        append: yes
+        groups: ""
+        append: no
       register: cwa_group
 
     # With no credentials file or AWS_* variables, the agent uses the instance profile,
@@ -137,13 +260,15 @@
       register: cwa_aws_dirs
       failed_when: cwa_aws_dirs.stat.exists
 
+    # Each agent start chowns its etc directory to cwagent, so a root owner here would
+    # report a change, and restart the agent, on every run.
     - name: Install the logs-only agent config
       become: yes
       copy:
         content: "{{ cwa_config | to_nice_json }}\n"
         dest: "{{ cwa_config_path }}"
-        owner: root
-        group: root
+        owner: cwagent
+        group: cwagent
         mode: "0644"
       register: cwa_config_file
 
@@ -177,9 +302,25 @@
       changed_when: false
       failed_when: false
 
+    - name: Decide whether the agent needs a (re)start
+      set_fact:
+        cwa_restart: >-
+          {{ (cwa_package is defined and cwa_package is changed)
+             or cwa_group is changed or cwa_config_file is changed
+             or cwa_limits is changed or cwa_active.rc != 0 }}
+
+    # Lets the post-start check skip lines logged before this run.
+    - name: Count the agent log's lines before the start
+      when: cwa_restart | bool
+      become: yes
+      shell: wc -l 2>/dev/null < {{ cwa_log_path }} || echo 0
+      register: cwa_log_before
+      changed_when: false
+
     # -m ec2 skips the Azure and GCE metadata probes; file: keeps the config off SSM.
     # -s enables and restarts the unit.
     - name: Load the config and (re)start the agent
+      when: cwa_restart | bool
       become: yes
       shell: |
         set -euo pipefail
@@ -187,10 +328,6 @@
         amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:{{ cwa_config_path }} -s
       args:
         executable: /bin/bash
-      when: >-
-        (cwa_package is defined and cwa_package is changed)
-        or cwa_group is changed or cwa_config_file is changed
-        or cwa_limits is changed or cwa_active.rc != 0
 
     - name: Require the agent to run as cwagent, not root
       shell: ps -o user= -p "$(systemctl show -p MainPID --value amazon-cloudwatch-agent)"
@@ -199,3 +336,31 @@
       retries: 5
       delay: 3
       until: cwa_user.stdout | trim == 'cwagent'
+
+    # Runs on every playbook run, restart or not: a process holding only cwagent's
+    # user and primary group, which every agent thread keeps, must be able to open it.
+    - name: Require the login file to be readable without supplementary groups
+      become: yes
+      command: setpriv --reuid=cwagent --regid=cwagent --clear-groups head -c1 {{ cwa_login_log }}
+      changed_when: false
+
+    # The agent logs "piping log from <group>/<stream>(<file>)" once its tailer opens
+    # the file, and "permission denied" once a second while it cannot. The old process
+    # keeps logging until it stops, so only lines after this start's banner count.
+    - name: Require this start to have opened the login file
+      when: cwa_restart | bool
+      become: yes
+      shell: |
+        set -euo pipefail
+        new=$(tail -n +{{ (cwa_log_before.stdout | trim | int) + 1 }} {{ cwa_log_path }} \
+          | awk '/Starting AmazonCloudWatchAgent/ { buf = "" } { buf = buf $0 "\n" } END { printf "%s", buf }')
+        grep -q 'Starting AmazonCloudWatchAgent' <<<"$new"
+        grep -qF '({{ cwa_login_log }}) to cloudwatchlogs' <<<"$new"
+        ! grep -qi 'permission denied' <<<"$new"
+      args:
+        executable: /bin/bash
+      register: cwa_opened
+      changed_when: false
+      retries: 10
+      delay: 3
+      until: cwa_opened.rc == 0
