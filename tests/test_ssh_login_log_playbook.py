@@ -3,9 +3,10 @@ agent reads a file it can open without supplementary groups.
 
 dpkg reports the package as the upstream version plus a Debian revision ("-1"), so the
 install condition must compare against that form: comparing the bare version would
-reinstall on every start. Conditions are evaluated through Ansible's templar, so the tests
-read the playbook as Ansible does. Skipped where Ansible is not installed (the CI job
-installs none); they run wherever the start script runs.
+reinstall on every start. The install condition, the restart decision and the post-start
+shell are evaluated through Ansible's templar; the other tests check the playbook's YAML.
+Skipped where Ansible is not installed (the CI job installs none); they run wherever the
+start script runs.
 """
 import subprocess
 import tempfile
@@ -24,13 +25,20 @@ except ImportError:  # pragma: no cover - depends on the machine
     yaml = None
 
 
+def _play():
+    return yaml.safe_load(PLAYBOOK.read_text())[0]
+
+
+def _task(tasks, prefix):
+    return next(t for t in tasks if t.get('name', '').startswith(prefix))
+
+
 @unittest.skipIf(yaml is None, 'ansible-core 2.19+ and PyYAML are not installed')
 class InstallConditionTest(unittest.TestCase):
     def setUp(self):
-        play = yaml.safe_load(PLAYBOOK.read_text())[0]
+        play = _play()
         self.vars = play['vars']
-        self.when = next(t for t in play['tasks']
-                         if t.get('name', '').startswith('Install the pinned agent'))['when']
+        self.when = _task(play['tasks'], 'Install the pinned agent')['when']
 
     def installs(self, installed: str) -> bool:
         # The playbook is our own tracked file, so its strings are trusted as templates.
@@ -47,16 +55,12 @@ class InstallConditionTest(unittest.TestCase):
                 self.assertTrue(self.installs(installed))
 
 
-def _task(tasks, prefix):
-    return next(t for t in tasks if t.get('name', '').startswith(prefix))
-
-
 @unittest.skipIf(yaml is None, 'ansible-core 2.19+ and PyYAML are not installed')
 class LoginFileTest(unittest.TestCase):
     """2026-11-09: an agent start lost its supplementary groups and could not read auth.log."""
 
     def setUp(self):
-        play = yaml.safe_load(PLAYBOOK.read_text())[0]
+        play = _play()
         self.vars = play['vars']
         self.tasks = play['tasks']
         self.agent_user = self.vars['cwa_config']['agent']['run_as_user']
@@ -69,6 +73,8 @@ class LoginFileTest(unittest.TestCase):
         made = _task(self.tasks, 'Create the login file')['file']
         self.assertEqual((made['path'], made['group'], made['mode']),
                          ('{{ cwa_login_log }}', self.agent_user, '0640'))
+        # A touch at the default times reports a change, which restarts rsyslog every run.
+        self.assertEqual((made.get('access_time'), made.get('modification_time')), ('preserve', 'preserve'))
         rotate = _task(self.tasks, 'Rotate the login file')['copy']['content']
         self.assertIn('{{ cwa_login_log }} {', rotate)
         self.assertIn(f'create 0640 syslog {self.agent_user}', rotate)
@@ -101,7 +107,7 @@ class RestartTest(unittest.TestCase):
     """Every run restarted the agent while its config file was owned by root (2026-11-12)."""
 
     def setUp(self):
-        play = yaml.safe_load(PLAYBOOK.read_text())[0]
+        play = _play()
         self.agent_user = play['vars']['cwa_config']['agent']['run_as_user']
         self.tasks = play['tasks']
         self.expr = _task(self.tasks, 'Decide whether the agent needs')['set_fact']['cwa_restart']
@@ -149,7 +155,7 @@ class PostStartLogCheckTest(unittest.TestCase):
     """
 
     def setUp(self):
-        play = yaml.safe_load(PLAYBOOK.read_text())[0]
+        play = _play()
         self.vars = play['vars']
         self.shell = _task(play['tasks'], 'Require this start to have opened')['shell']
 

@@ -6,7 +6,7 @@
 #        -> amazon-cloudwatch-agent (as cwagent) -> CloudWatch Logs
 #           /market-data-notification/sshd (90 days, Terraform-owned)
 #
-# The agent reads its own file through its primary group, never a supplementary one.
+# The agent reads the login file through its primary group, never a supplementary one.
 # Pinned 1.300074.0 sets supplementary groups with x/sys/unix.Setgroups, which changes
 # only the calling thread, while its setgid and setuid change every thread. So whether
 # a thread can read through adm depends on scheduling. That is the likely cause of the
@@ -129,7 +129,8 @@
     # rsyslog runs as syslog:syslog and /var/log is 0755 root:syslog, so it cannot create
     # this file, only append to it. The file is made here, and logrotate's create remakes it.
     # rsyslog keeps writing to a deleted file's open handle, so a remade file also needs
-    # the rsyslog restart below.
+    # the rsyslog restart below. preserve: a touch with the default times reports a change
+    # and so restarts rsyslog on every run.
     - name: Create the login file, readable through cwagent's primary group
       become: yes
       file:
@@ -191,8 +192,8 @@
       shell: |
         set -euo pipefail
         stamp=$(systemctl show -p ActiveEnterTimestamp --value rsyslog) || exit 2
+        [ -n "$stamp" ] || exit 2  # date -d "" parses as midnight
         started=$(date -d "$stamp" +%s) || exit 2
-        [ -n "$stamp" ] || exit 2
         test "$(stat -c %Y /etc/rsyslog.d/40-sshd-login.conf)" -gt "$started"
       args:
         executable: /bin/bash
@@ -201,8 +202,9 @@
       failed_when: rsyslog_stale.rc > 1
 
     # A broken rule would stop all of rsyslog's logging, auth.log included, at its next
-    # restart. So it is checked first, and on any failure it is removed and rsyslog is
-    # brought back up without it, if the config passes without it.
+    # restart. So the whole config is checked before the restart. If the check or the
+    # restart fails, the rule is removed and rsyslog restarts without it, provided the
+    # config then passes.
     - name: Check the rsyslog config, then restart rsyslog
       when: rsyslog_rule is changed or login_file is changed or rsyslog_stale.rc == 0
       become: yes
@@ -237,8 +239,8 @@
               rsyslog restarted without it, so login lines are not reaching the login file
 
     # No supplementary groups: the login file needs none, and adm would let the agent
-    # read all of /var/log. It also makes the failing state the only state, so the
-    # read check below tests what the agent actually holds.
+    # read all of /var/log. With none, every agent thread holds the same groups, so the
+    # read check below tests what each thread holds.
     - name: Remove cwagent from every supplementary group
       become: yes
       user:
@@ -337,8 +339,8 @@
       delay: 3
       until: cwa_user.stdout | trim == 'cwagent'
 
-    # Runs on every playbook run, restart or not: a process holding only cwagent's
-    # user and primary group, which every agent thread keeps, must be able to open it.
+    # No restart condition: a rotation can remake the file between restarts. The check
+    # holds only cwagent's user and primary group, which every agent thread keeps.
     - name: Require the login file to be readable without supplementary groups
       become: yes
       command: setpriv --reuid=cwagent --regid=cwagent --clear-groups head -c1 {{ cwa_login_log }}
