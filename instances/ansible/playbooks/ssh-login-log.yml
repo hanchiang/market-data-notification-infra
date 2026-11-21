@@ -11,7 +11,7 @@
 # only the calling thread, while its setgid and setuid change every thread. So whether
 # a thread can read through adm depends on scheduling. That is the likely cause of the
 # 2026-11-09 start that could not read auth.log for 26 hours (workspace ticket
-# docs/tickets/todo/2026-11-10-infra-login-lines-stop-after-agent-restart.md).
+# docs/tickets/done/2026-11-10-infra-login-lines-stop-after-agent-restart.md).
 #
 # The pins come from the 2026-10-28 third-party audit. Its verdict, caveats and the
 # upgrade trigger (move to 1.300074.1 once AWS publishes it) live in the workspace
